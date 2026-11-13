@@ -1,0 +1,27 @@
+FILESTAT EDITOR - STEP 3.4: STABLE VT100 REDRAW
+
+Hardware feedback from Step 3.3 proved that navigation and overlay control were
+working: Up/Down changed vtop and the correct file lines were selected.  The
+remaining fault was terminal redraw: each 24-row frame appeared below the
+previous frame.
+
+The supplied ED2 editor was examined only as a terminal-I/O reference.  Its
+VT100 output module uses three useful conventions that are now adopted here:
+
+  clear display:      ESC [ H followed by ESC [ J
+  cursor position:    fixed two-digit CUP, e.g. ESC [ 03 ; 01 H
+  erase to EOL:       ESC [ K
+
+The more important architectural change is that a full display erase is no
+longer performed on every navigation key.  VIEWCTL is resident and performs
+one clear when the viewer is entered.  OVL_VIEW then renders one frame into
+rows 1-24 and returns.  On the next key, VIEWCTL changes vtop and calls the
+overlay again; the overlay overwrites the same rows in place.
+
+This retains the Step 3.3 overlay rule:
+
+  resident VIEWCTL: persistent navigation + keyboard + lifetime
+  OVL_VIEW page 5:   render exactly one frame, then RET
+
+The viewer remains fixed at 80x24 and column 80 remains unused to avoid
+right-margin auto-wrap.

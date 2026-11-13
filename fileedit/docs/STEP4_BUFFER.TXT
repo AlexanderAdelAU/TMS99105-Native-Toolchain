@@ -1,0 +1,108 @@
+FILESTAT TEXT EDITOR -- STEP 4: PERSISTENT BUFFER + CURSOR
+==========================================================
+
+What this milestone changes
+---------------------------
+The Step 3 viewer repeatedly read the disk stream.  Step 4 introduces the
+first true editor data structure: a persistent text arena at virtual
+>9000-BFFF.
+
+  >8000-8FFF    executable overlay window (unchanged)
+  >9000-BFFF    persistent editor text arena (NEW)
+
+The buffer is not a C global array because such a large array would consume
+resident >1000-7FFF space.  Instead EDITBUF.C deliberately points at >9000.
+The first 12287 bytes hold file text and the final byte is kept for a NUL
+sentinel:
+
+  >9000- >BFFE  file bytes
+  >BFFF         sentinel
+
+Why this is safe for the overlay architecture
+----------------------------------------------
+The MONITOR describes segments 1-12 (>1000-BFFF) as User TPA.  FILESTAT's
+OVLMGR changes segment 8 for code overlays; Step 4 does not remap segments
+9-11.  The editor therefore has 12 KB of virtual storage which remains stable
+while WORD, CHAR, RPT and VIEW are swapped through segment 8.
+
+This is the key persistent-state rule in physical form: code may disappear at
+>8000, while the document survives next door at >9000-BFFF.
+
+No fifth code overlay
+---------------------
+The hardware map register selects page 0-3 for a segment.  Segment 8 already
+has the established four FILESTAT code images.  Step 4 therefore does not add
+an OVL_EDIT page.  OVL_VIEW becomes a shared frame renderer:
+
+  vmode=0   read-only viewer frame
+  vmode=1   editor/cursor frame
+
+EDITCTL remains resident and owns editor lifetime, key decoding and cursor
+state.  This is also more consistent with the architecture established in
+Step 3.3.
+
+New resident module: EDITBUF.C
+------------------------------
+EDITBUF owns:
+
+  ebbase     base pointer (>9000)
+  eblen      loaded byte count
+  eblines    logical line count
+  ebcap      12287-byte capacity
+  vidx       transient renderer index
+
+Its important services are:
+
+  ebload()   open current fsname, load/normalize it, close disk file
+  ebseek(n)  position vidx at logical line n
+  ebllen(n)  return logical length of line n
+  ebtotln()  return cursor line count (empty file has one editable line)
+
+Once ebload() returns, screen navigation is independent of FILEIO.
+
+New resident module: EDITCTL.C
+------------------------------
+EDITCTL owns:
+
+  etop       first line in the 20-row window
+  eline      cursor line
+  ecol       cursor logical column (zero-origin internally)
+  ewant      desired column preserved by vertical motion
+  etotal     logical cursor line count
+  eleft      first logical column displayed on long lines
+
+Navigation is intentionally editor-like:
+
+  Up/Down       move one line, preserving desired column where possible
+  Left/Right    move one character and cross line boundaries
+  PgUp/PgDn     move twenty logical lines
+  Home/End      beginning/end of current line
+  Q             return to resident menu
+
+When ecol moves beyond the 79-column text viewport, eleft follows it so long
+lines scroll horizontally instead of trapping the cursor at the edge.
+
+What Step 4 deliberately does NOT do
+------------------------------------
+No insertion, deletion, dirty flag, save, save-as or interactive filename
+entry exists yet.  The editor title says [NAV ONLY] to make that boundary
+obvious during hardware testing.
+
+Why not save yet?  The buffer occupies a new memory region and is accessed
+while another segment is being remapped for code.  First prove that loading,
+repeated overlay redraws and cursor motion leave the data intact.  Then edit
+operations can be added without mixing memory-architecture bugs with file-
+write bugs.
+
+Suggested next milestone
+------------------------
+Step 4.1 should add in-memory editing only:
+
+  printable character -> insert at cursor
+  Backspace            -> delete before cursor
+  Delete               -> delete at cursor
+  Enter                -> insert CR / split line
+  dirty flag           -> '*' in title/status
+
+The disk file should still remain untouched in that step.  After insertion and
+deletion survive aggressive navigation tests, Step 5 can add Save/Save As.

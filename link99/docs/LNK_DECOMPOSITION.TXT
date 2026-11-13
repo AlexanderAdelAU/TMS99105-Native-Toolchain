@@ -1,0 +1,38 @@
+LNK.C ANCESTOR - INITIAL DECOMPOSITION
+======================================
+
+KEEP / ADAPT (core linker algorithm)
+------------------------------------
+  getname      module identity
+  isunres      unresolved-symbol lookup
+  link         merge entry-point and external-reference state
+  load         interpret REL records and establish module-relative locations
+  newsym       symbol insertion
+  newtbl       symbol-table sentinels / initialization concept
+  okay         unresolved/redundant checks
+  phase1       ingest/link pass concept
+  phase2       final-emission pass concept (output format must change)
+  readref      relocation/reference stream concept
+  resolve      patch external-reference chains / grouped refs concept
+
+DEFER
+-----
+  search       library search
+  nxtmod       library member traversal
+  getndx       indexed-library support
+  seek         old library-index seeking
+  show         map/list diagnostics
+
+DROP / REPLACE
+--------------
+  CP/M COM/LGO framing and 8080 RET/JMP opcodes
+  -B code-spill model
+  .O$ and .R$ temporary-file strategy as a mandatory architecture
+  CP/M drive-designator behavior
+  memory acquisition based on avail() consuming nearly all free RAM
+
+IMPORTANT
+---------
+The ancestor is a reference for the small two-phase linking algorithm, not a
+source file to port line-for-line.  Current CommonLibrary REL/XREFS semantics
+have priority wherever they differ from the historical implementation.

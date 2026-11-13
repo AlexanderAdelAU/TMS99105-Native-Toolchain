@@ -1,0 +1,26 @@
+FILEEDIT99 modal Ctrl-F Find-Next candidate — 28 September 2026
+================================================================
+
+Base
+----
+SBC_FileEdit99_CTRLF_FIND_candidate_2026-09-27 (hardware-confirmed basic Find)
+
+Behavior
+--------
+* Ctrl-F enters Find mode and row 24 remains dedicated to "Find: <term>".
+* Enter or Ctrl-F searches forward for the current term.
+* After a match, the next search begins at match+1, so repeated searches advance
+  and overlapping occurrences can still be found.
+* The document view is redrawn around each match while the Find prompt remains
+  active on row 24.
+* Esc exits Find mode and returns to the normal editor/status line.
+* Backspace/Delete edit the term.
+* Editing the term resets the search start to the current document cursor.
+* Search remains case-sensitive, forward-only, no wrap, maximum 32 characters.
+* Not found leaves Find mode active and shows [Not found] on row 24.
+* Find never modifies the document.
+
+Implementation
+--------------
+The search pattern remains local to OVL_VIEW because OVL_VIEW stays mapped for
+one modal Find session.  No resident search buffer or EDITBUF change is used.

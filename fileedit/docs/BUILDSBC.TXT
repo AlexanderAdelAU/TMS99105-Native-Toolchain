@@ -1,0 +1,83 @@
+FILESTAT / TEXT EDITOR -- native SBC build sequence
+================================================
+
+The commands below show the application build using the existing SBC tools.
+Generated files are shown explicitly so the resident/overlay relationship is
+visible.
+
+1. Compile the executable entry module normally:
+
+   SMALLC99 FILESTAT
+
+2. Compile resident helper modules and overlay modules with -M:
+
+   SMALLC99 FILEIO   -M
+   SMALLC99 FILEDATA -M
+   SMALLC99 TERMIO   -M
+   SMALLC99 EDITBUF  -M
+   SMALLC99 VIEWCTL  -M
+   SMALLC99 EDITCTL  -M
+   SMALLC99 EDITMENU -M
+   SMALLC99 OVL_WORD -M
+   SMALLC99 OVL_CHAR -M
+   SMALLC99 OVL_RPT  -M
+   SMALLC99 OVL_VIEW -M
+
+3. Assemble the generated A99 modules:
+
+   R99 FILESTAT
+   R99 FILEIO
+   R99 FILEDATA
+   R99 TERMIO
+   R99 EDITBUF
+   R99 VIEWCTL
+   R99 EDITCTL
+   R99 EDITMENU
+   R99 OVL_WORD
+   R99 OVL_CHAR
+   R99 OVL_RPT
+   R99 OVL_VIEW
+   R99 EBMAP      (hand-written resident bank mapper)
+
+4. Validate overlay objects and generate the overlay include files:
+
+   DREL -i OVLADDR.INC ^
+     OVL_WORD.R99=2,1,wordscan:O_WORD ^
+     OVL_CHAR.R99=3,2,charscan:O_CHAR ^
+     OVL_RPT.R99=4,3,report:O_RPT ^
+     OVL_VIEW.R99=5,4,viewfile:O_VIEW
+
+   Assignments:
+
+     OVL_WORD -> physical page 2, overlay ID 1
+     OVL_CHAR -> physical page 3, overlay ID 2
+     OVL_RPT  -> physical page 4, overlay ID 3
+     OVL_VIEW -> physical page 5, overlay ID 4
+
+   DREL creates OVLADDR.INC and OVLTABLE.INC.  OVLADDR.INC must contain
+   O_WORD, O_CHAR, O_RPT and O_VIEW.
+
+5. Assemble the resident overlay support after those generated files exist:
+
+   EBMAP.A99 is independent and may be assembled with the resident modules;
+   the PowerShell build script includes EBMAP.R99 in the resident link set.
+
+   R99 OVLMGR
+   R99 OVLAPI
+
+6. Link the resident modules, runtime libraries and physical overlay pages.
+   make_SBC_filestat99.ps1 shows the exact reference LINK99 command used by the
+   project.
+
+Build-mode distinction:
+
+   FILESTAT        normal mode -> executable startup is emitted
+   all other C     -M          -> module output, no startup branch
+
+Hardware smoke tests:
+
+   FILESTAT SAMPLE.TXT /E     Step 6 editor with Open/New/Save As
+   FILESTAT /E                Step 6 editor with no initial document
+   FILESTAT SAMPLE.TXT /V     direct Tera Term viewer
+   FILESTAT SAMPLE.TXT        original analyser
+   FILESTAT SAMPLE.TXT /L     original list + analyser

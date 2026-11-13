@@ -1,0 +1,108 @@
+SBC_R99 C / IOLIB99 alignment
+Date: 2026-09-19
+
+Purpose
+-------
+Align SBC_R99 with the corrected Small-C escape semantics and the corrected
+IOLIB99 text-stream contract.  Legacy newline/fclose behaviour is not retained.
+
+Required character / stream contract
+------------------------------------
+  '\r'  = 0x0D (CR)
+  '\n'  = 0x0A (LF)
+
+Text input:
+  external CRLF, CR-only, or LF-only -> one logical '\n' (LF)
+
+Text output:
+  logical '\n' -> external CRLF on this target
+
+Binary I/O:
+  no CR/LF translation
+
+Key SBC_R99 changes
+-------------------
+1. R99GET.c
+   - Corrected fclose() tests to the ISO C convention: 0 means success,
+     nonzero/EOF means failure.
+   - Updated the source-reader documentation to state that IOLIB99 returns
+     logical LF for line endings.
+
+2. R99PUT.c
+   - Corrected both fclose() tests to the ISO C convention.
+   - Its existing listing writer remains intentional: it writes raw blocks,
+     so it emits CR before LF itself.  This produces exactly one CRLF pair.
+
+3. R99.c
+   - Opens the relocatable .R99 object with "wb" because it is binary data.
+
+4. R99SYMB.c
+   - Avoids attempting fclose() on the zero-initialized hexbuf descriptor
+     during an early abort before files have been opened.
+
+5. R99gbl.h / mess.c
+   - Removed stale wording that described CR as the logical newline.
+
+6. stdio.h
+   - CR=0x0D, LF=0x0A, NEWLINE=LF.
+   - SEEK_SET, SEEK_CUR, SEEK_END retained as standard stdio origin macros.
+
+7. Build path
+   - make_R99_SBC.ps1 rebuilds IOCORE, IOOPEN, IOREAD, and IOWRITE from the
+     corrected C sources every time.
+   - The old precompiled iolib99.LIB is no longer linked.
+   - call.R99 and cbdos.R99 are linked explicitly with the rebuilt I/O modules.
+   - The script contains preflight checks for the newline/fclose contract.
+
+8. Package cleanup
+   - Removed the generated build/ tree.
+   - Removed root-level duplicate host executables; toolchain/ is authoritative.
+   - Removed stale precompiled IOLIB99 objects/library/index from lib/ so they
+     cannot mask a source regression.
+
+Verification performed
+----------------------
+Static assertions passed for all of the following:
+  - stdio CR/LF/NEWLINE values
+  - CR/LF text-input normalization
+  - CRLF pairing without duplicate LF
+  - fgets() retaining '\n'
+  - binary getc()/putc() paths remaining raw
+  - text output LF -> CRLF
+  - puts() appending one newline
+  - fclose() returning 0 on success and EOF on failure
+  - R99 source reader consuming logical LF
+  - R99 listing output emitting CRLF once
+  - .R99 object opened as binary
+  - char_attr[10] (LF) and char_attr[13] (CR) both classify as END_LIN
+  - build script no longer links iolib99.LIB and rebuilds runtime modules
+
+The active IOCORE.C, IOOPEN.C, IOREAD.C, IOWRITE.C, IOSEEK.C and IODEFS.H
+match the corrected IOLIB99 source set supplied in the preceding compliance
+pass.  The bundled toolchain/smallcp.exe is byte-identical to the corrected
+Small-C host compiler used by the aligned SBC_Smallc99 package.
+
+Toolchain execution note
+------------------------
+The final PowerShell/Windows cross-build was not executed in this Linux
+runtime because the supplied host tools are Windows PE executables and no
+Windows compatibility runtime is installed.  The build script was checked
+structurally and the source/runtime invariants above were verified directly.
+Run make_R99_SBC.ps1 on the normal Windows build host to produce R99.COM.
+
+
+RUNTIME CONTRACT HOTFIX - 2026-09-19
+--------------------------------------
+The assembler no longer closes/reopens the source to rewind it between passes.
+R99GET source_rewind() now calls lseek(unit, 0, SEEK_SET), and IOSEEK is rebuilt
+from source (ASMVER) and linked explicitly with the other corrected IOLIB99
+modules.  The redundant rewind immediately after fopen() was removed.
+
+This matters because the historical R99 seek shim was coupled to IOLIB99's old
+non-standard fclose() result (1 success / 0 failure).  Correct IOLIB99 uses the
+standard contract: 0 success / EOF failure.  Rewinding no longer depends on
+fclose at all.
+
+The build now verifies the specific fclose implementation in IOOPEN.C, rejects
+any close/reopen source-rewind shim, and verifies DREL sees fresh fclose and
+lseek exports before LINK99 runs.

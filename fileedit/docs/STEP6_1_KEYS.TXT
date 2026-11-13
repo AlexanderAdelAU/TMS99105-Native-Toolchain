@@ -1,0 +1,39 @@
+FILESTAT TEXT EDITOR -- STEP 6.1
+FAST CURSOR INPUT, [MOD], AND TABS
+
+WHY STRAY B/C COULD APPEAR
+--------------------------
+Tera Term sends a cursor key as a multi-byte VT100 sequence (for example
+ESC [ C for Right).  Step 6 repainted all 24 terminal rows after every cursor
+move.  If another arrow was pressed while that serial output was still being
+transmitted, the SBC could see only the tail of the next escape sequence.  A
+final C or B is a printable ASCII letter, so the editor could insert it.
+
+STEP 6.1 changes the lifetime: cursor-only moves do not repaint document rows.
+The resident controller updates only row 24 and repositions the hardware cursor.
+A full OVL_VIEW frame is requested only when the viewport scrolls or document
+text changes.  This greatly reduces serial traffic and keeps the input receiver
+waiting for the next key instead of spending its time repainting.
+
+The CSI decoder is also now a small state machine: after ESC [, it consumes the
+entire sequence through its ANSI final byte.  Thus sequences with parameters,
+such as ESC [ 1 ; 5 C, are consumed as one key rather than leaving suffix bytes
+behind.
+
+MODIFIED STATE
+--------------
+The terse '*' introduced in Step 6 is replaced by the explicit [MOD] marker in
+both the editor title and main menu.  [NEW] remains independent, so a newly
+created and edited document may show both [NEW] and [MOD].
+
+TABS
+----
+TAB now inserts a real ASCII 09 byte into the persistent document.  Rendering
+expands it to the next four-column stop.  Cursor position calculation uses the
+same expansion, so the visible cursor remains aligned with displayed text.
+Backspace/Delete remove a TAB as one document character, and Save preserves the
+09 byte on disk.
+
+The implementation still uses the same four segment-8 code overlays.  No new
+overlay is required: the new key/control work is resident, and OVL_VIEW remains
+the shared one-frame renderer.

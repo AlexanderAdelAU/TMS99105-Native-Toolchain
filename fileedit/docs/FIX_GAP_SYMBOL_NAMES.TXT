@@ -1,0 +1,11 @@
+FILEEDIT gap-buffer EBMAP symbol-name build fix
+===============================================
+
+EBMAP.A99 accidentally referred to the C globals as ebgaplo/ebgaphi.
+EDITBUF.C actually defines them as ebagplo/ebagphi ("eba" prefix), and
+EBMAP's EXT declarations already used those correct names.
+
+The mismatch produced six assembler undefined-symbol errors.  All six
+instruction operands now use @ebagplo / @ebagphi consistently.
+
+No gap-buffer algorithm or ABI behaviour changed in this fix.

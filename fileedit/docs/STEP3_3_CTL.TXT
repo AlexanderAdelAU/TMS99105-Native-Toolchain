@@ -1,0 +1,102 @@
+NOTE: Step 3.4 supersedes the redraw/terminal details in this note.
+
+FILESTAT / TEXT EDITOR -- STEP 3.3
+=================================
+Resident viewer controller + one-frame overlay
+
+Why Step 3/3.1 was changed
+-------------------------
+The real MONITOR V5.6 source shows that console input is already blocking:
+
+    MCIN:   READ    R1
+            RET
+
+READ is XOP13.  XOP13 waits on the receive-buffer-full CRU bit:
+
+    XOP13A: TB      21
+            JNE     XOP13A
+
+Only when a character exists does it read and acknowledge the UART.  Therefore
+BDOS function 1, which calls MCONIN/MCIN, is the correct blocking byte input for
+this SBC.  No C polling loop is required.
+
+The stronger overlay rule
+-------------------------
+Step 3.3 also corrects the ownership boundary.  The original FILESTAT tutorial
+was built around short-lived overlays: resident code chooses an overlay, the
+overlay performs one operation, and it returns.
+
+The screen viewer now follows exactly that rule:
+
+    resident VIEWCTL
+        |
+        +-- count lines / position file
+        +-- runview()
+        |      |
+        |      +-- map OVL_VIEW at >8000
+        |      +-- draw ONE 80x24 frame
+        |      +-- return immediately
+        |
+        +-- wait for one key in resident code
+        +-- update resident vtop/vtotal
+        +-- repeat
+
+OVL_VIEW contains no keyboard wait and no lifetime loop.
+
+Persistent viewer state
+-----------------------
+VIEWCTL.C is resident and defines:
+
+    vtop        first logical line displayed
+    vtotal      total logical lines in the file
+
+OVL_VIEW reads those values but does not own them.
+
+File positioning is resident too.  Before every overlay call, VIEWCTL rewinds
+and skips to vtop.  OVL_VIEW only performs sequential fsgetc() calls while it
+renders the twenty body rows.  This deliberately resembles the already-proven
+OVL_WORD/OVL_CHAR pattern.
+
+Terminal input
+--------------
+TERMIO trmkey() remains:
+
+    return _bdos(1, 0);
+
+The MONITOR provides the blocking.  The path does not echo the byte.
+
+VIEWCTL decodes:
+
+    U / Up arrow       one line up
+    D / Down arrow     one line down
+    P / PgUp           one page up
+    N / PgDn           one page down
+    H / Home           top of file
+    Q                  quit viewer
+
+Screen margin
+-------------
+The frame deliberately uses at most 79 printable columns.  Some VT terminals
+auto-wrap immediately after column 80; leaving column 80 unused prevents the
+horizontal rule or a long source line from moving the cursor unexpectedly.
+
+Bench test
+----------
+1. Build normally.
+2. Run:
+
+       FILESTAT TEST.C /E
+
+3. Press V.  One viewer frame should appear and remain completely still.
+4. First test D, U, N, P, H and Q.
+5. Then test the physical cursor/PgUp/PgDn/Home keys.
+6. Q must return to the resident menu.
+7. Also test:
+
+       FILESTAT TEST.C /V
+       FILESTAT TEST.C
+       FILESTAT TEST.C /L
+
+If the frame itself still repeats without a key, that is now a very different
+and much narrower fault: OVL_VIEW contains no redraw loop, so the next place to
+inspect would be overlay return/control flow rather than console semantics.

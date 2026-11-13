@@ -1,0 +1,138 @@
+FILESTAT TEXT EDITOR -- STEP 6: DOCUMENT LIFECYCLE
+==================================================
+
+Purpose
+-------
+Step 5 proved editing, verified Save and rolling backups on the real SBC.
+Step 6 removes the last command-line-only limitation from normal editor use:
+Open, New and Save As are now resident menu operations.
+
+The implementation still uses the overlay architecture internally, but the UI
+no longer exposes buffer size or mapped-memory terminology.
+
+Menu
+----
+    E  Edit
+    O  Open
+    N  New
+    S  Save
+    A  Save As
+    V  View
+    T  Statistics
+    Q  Quit
+
+FILESTAT may now enter the editor with or without an initial document:
+
+    FILESTAT TEST.C /E
+    FILESTAT /E
+
+Persistent document lifetime
+----------------------------
+Before Step 6, choosing Edit or View reloaded the command-line file.  Step 6
+loads the current document once and keeps it resident across menu commands.
+Ctrl-X therefore means only "return to menu"; it does not discard edits.
+
+Unsaved protection is performed at the operations that actually replace or
+abandon a document:
+
+    Open
+    New
+    Quit
+
+A dirty document, or a new document not yet written to disk, offers:
+
+    S  Save and continue
+    D  Don't save
+    C  Cancel
+
+Open safety
+-----------
+Open is deliberately non-destructive on failure.  EDITBUF first opens and
+counts the candidate file without altering the current arena.  Files that do
+not exist or exceed the editor's internal arena are rejected while the current
+document remains intact.  Only after a successful second open is the old RAM
+image replaced and the new filename committed.
+
+New
+---
+New asks for a short filename but creates only an empty RAM document.  The disk
+file is not created until Save.  [NEW] in the title/menu indicates that no disk
+copy exists yet.  New refuses a name that already exists and directs the user
+to Open instead.
+
+Save As
+-------
+Save As writes the current RAM image to a requested target and changes the
+current document name only after verification succeeds.
+
+If the target already exists, the user must explicitly confirm replacement.
+The proven Step 5 protection is then applied to that target:
+
+    TARGET.C  -> TARGET.BAK
+    write new TARGET.C
+    close/reopen
+    verify normalized bytes against RAM
+
+If any phase fails, the original editor document name and RAM image remain
+unchanged.  When replacement had begun, the pre-replacement target remains in
+its rolling backup.
+
+Save
+----
+Save still uses Ctrl-O in the editing screen and S on the menu.  Existing files
+receive the same backup/replace/verify treatment as Step 5.  A clean new file
+is still written because it has no disk copy yet; this allows an intentionally
+empty document to be created safely.
+
+Filename input
+--------------
+The resident NAMEIO module provides a compact filename prompt:
+
+    printable non-space characters   append
+    Backspace or Delete              erase last character
+    Ctrl-U                           clear the entry
+    Enter                            accept
+    Esc                              cancel
+
+Input is capped at 14 characters, sufficient for an optional drive prefix and
+8.3 filename on this SBC.
+
+Statistics
+----------
+The original FILESTAT statistics overlays are retained unchanged and continue
+to analyse a disk file.  Therefore T handles editor state explicitly:
+
+    clean saved document     analyse immediately
+    dirty document           Save first / saved disk version / Cancel
+    new unsaved document     ask the user to Save first
+
+This keeps the original overlays untouched while making their relationship to
+unsaved editor text unambiguous.
+
+User-interface cleanup
+----------------------
+The editor frame no longer displays "Bytes used/capacity", [MEM] or [SAVED].
+Normal document state is shown instead:
+
+    TEST.C            saved/current
+    TEST.C  *         modified
+    NEWFILE.TXT [NEW] new, not yet on disk
+
+The internal >9000-BFFF capacity guard remains in place, but it is an
+implementation safety check rather than a normal editing concept.
+
+Architecture
+------------
+No fifth code overlay is introduced.
+
+    >1000-7FFF   resident lifetime, file/document, menu and terminal services
+    >8000-8FFF   OVL_WORD / OVL_CHAR / OVL_RPT / OVL_VIEW
+    >9000-BFFF   persistent editor text arena
+
+New resident module:
+
+    NAMEIO.C     filename entry for Open/New/Save As
+
+The current filename is now copied into resident FILEDATA storage instead of
+remaining an argv pointer, which is what allows Save As and Open to change the
+active document safely.

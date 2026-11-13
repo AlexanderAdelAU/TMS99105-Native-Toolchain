@@ -1,0 +1,37 @@
+FILEEDIT99 bank-0 insertion leaf optimization — HARDWARE VALIDATED
+=================================================================
+Date: 27 September 2026
+
+Status
+------
+ACCEPTED HARDWARE-VALIDATED PERFORMANCE BUILD.
+
+Hardware result
+---------------
+On the target SBC, inserting characters works correctly and there is no
+appreciable insertion delay even with large files.
+
+Implementation retained
+-----------------------
+* Known-good FILEEDIT99 baseline remains the foundation.
+* Only insertion is accelerated.
+* A small leaf routine moves the bank-0 portion of the suffix directly with
+  MOVB; it performs no mapping calls, no nested calls, and no stack changes.
+* Bank 1, heap, shell RAM, boundary bytes, and deletion remain on the original
+  known-good ebget()/ebput() path.
+* Existing EBPUT ABI, CR/LF handling, and current-line redraw fixes are retained.
+
+Build verification
+------------------
+A clean Linux-host rebuild using the verified Small-C, R99, DREL, and LINK99
+ports produced an executable byte-for-byte identical to the executable tested
+on hardware.
+
+FILEEDIT.EXE size:   36708 bytes
+SHA-256:             66e4a448224dfc608da57da0f821048c75dea846797cb24df77dcb793897c011
+
+Promotion rule
+--------------
+This exact source/build is the accepted optimized FILEEDIT99 version. Do not
+extend the fast path or change mapping behaviour without treating the result as
+a new candidate and re-running hardware regressions.

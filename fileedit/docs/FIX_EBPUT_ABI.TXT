@@ -1,0 +1,38 @@
+FILEEDIT display corruption fix -- EBMAP ebput() ABI
+==================================================
+
+Symptom
+-------
+The editor frame, title, gutter and status bar render correctly, but document
+text is garbage/random bytes immediately after opening a file.
+
+Root cause
+----------
+EBMAP.A99 Step 9G replaced the C ebput() path with hand-written assembly.
+The two C arguments were read in the wrong stack order.  Small-C/Plus pushes
+arguments left-to-right, and CALL leaves the last C argument nearest the
+callee frame.  Therefore for ebput(pos,c):
+
+    @2(SP) = c
+    @4(SP) = pos
+
+The buggy code treated @2(SP) as pos and @4(SP) as c.  During file load it
+therefore stored the running buffer index as the byte value at an address
+derived from the input character, leaving most of the document arena as old
+RAM.  OVL_VIEW then faithfully displayed that stale RAM as punctuation and
+dots.
+
+Fix
+---
+Change ebput entry to:
+
+    MOV     @4(SP),R1              ; pos
+    MOV     @2(SP),R2              ; c
+
+One-argument ebget(), ebank() and esbank() are unaffected.
+
+Rebuild
+-------
+Run make_SBC_FileEdit99.ps1 on the normal Windows build machine.  The
+existing dist/FILEEDIT.EXE in this archive predates this source fix and must
+not be deployed without rebuilding.

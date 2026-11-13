@@ -1,0 +1,11 @@
+FILEEDIT STEP 7 - APPLICATION IDENTITY AND DISPLAY-ONLY LINE NUMBERS
+
+This milestone changes the application identity from FILESTAT TEXT EDITOR to FILEEDIT while retaining the original FILESTAT analyser as a feature and compatibility command.
+
+The editor now reserves terminal columns 1-6 for a five-digit, right-aligned line-number gutter plus one space.  Editable text begins at column 7 and extends through column 79.
+
+The gutter is renderer state only.  OVL_VIEW computes each displayed number as etop + screen-row.  No line-number bytes are inserted into EDITBUF (>9000-BFFF), so Save/Save As, statistics, file size and document editing remain completely independent of the numbers on screen.
+
+Cursor addressing in OVL_EDIT adds six terminal columns to the visual text column.  Horizontal scrolling still changes eleft/vleft for document text only; the gutter remains fixed.  The available visual text viewport is therefore 73 columns instead of 79.
+
+FILEEDIT.EXE is the primary output.  The build also emits FILESTAT.EXE as a byte-identical compatibility alias so the original tutorial commands and analyser workflow remain available.

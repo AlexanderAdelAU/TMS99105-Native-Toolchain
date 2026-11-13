@@ -1,0 +1,261 @@
+;*******************************************************************
+; EBMAP.A99 -- FileEdit banked editor-data mapper (Step 9)
+;
+; C entries:
+;       ebank(bank)        page-select >9000-BFFF (segments 9-B)
+;       esbank(bank)       page-select >C000-DFFF (segments C-D)
+;       ehfree()           shell/common FREEMEM word at >00A6
+;       ehlimit()          shell/common MEMLIMIT word at >00B0
+;       ehclaim()          return FREEMEM and advance it to MEMLIMIT
+;
+; The shell V6.3 COM launcher proves that segments C/D may be switched to
+; physical page 1 while an application runs.  Its COMMON return gate at
+; >02F0 executes PSEL_DIS before branching to RETURN, and RETURN restores
+; C=0,D=0 before MAP_INIT.  FileEdit nevertheless restores both windows to
+; page 0 itself at normal editor/viewer boundaries.
+;
+; Segment 8 is the FileEdit code-overlay window and is never touched here.
+; Segment E is BDOS and segment F is ROM; neither is touched.
+;*******************************************************************
+
+        DXOP    PSEL_DIS,0
+        DXOP    PSEL_EN,1
+        DXOP    RET,7
+
+R0      EQU     0
+R1      EQU     1
+R2      EQU     2
+R4      EQU     4
+SP      EQU     10
+R11     EQU     11
+R12     EQU     12
+
+MAP_WIN_BASE   EQU     080C0H
+BYTEWIDE       EQU     2
+SEG9_CRU       EQU     18              ; segment 9 * 2
+SEGC_CRU       EQU     24              ; segment C * 2
+FREEMEM        EQU     00A6H
+MEMLIMIT       EQU     00B0H
+EBBANK         EQU     03000H          ; 12 KB
+EBFIXED        EQU     06000H          ; 24 KB
+EBSHELL        EQU     02000H          ; 8 KB
+
+; ebank(bank) -- first C argument is at @2(SP).
+; Remap the 12 KB data window at >9000-BFFF.
+ebank:
+        MOV     @2(SP),R0
+        ANDI    R0,0001H
+        MOV     R0,R4
+        SLA     R0,8
+
+        PSEL_DIS
+        LI      R12,MAP_WIN_BASE
+        AI      R12,SEG9_CRU
+        LDCR    R0,BYTEWIDE            ; >9000-9FFF
+        AI      R12,2
+        LDCR    R0,BYTEWIDE            ; >A000-AFFF
+        AI      R12,2
+        LDCR    R0,BYTEWIDE            ; >B000-BFFF
+        PSEL_EN
+        RET
+
+; esbank(bank) -- remap the shell's 8 KB C/D window.
+; Page 1 is private editor RAM while FileEdit is active; page 0 exposes the
+; shell again.  This is the same mapping used by SHELL V6.3 for raw COMs.
+esbank:
+        MOV     @2(SP),R0
+        ANDI    R0,0001H
+        MOV     R0,R4
+        SLA     R0,8
+
+        PSEL_DIS
+        LI      R12,MAP_WIN_BASE
+        AI      R12,SEGC_CRU
+        LDCR    R0,BYTEWIDE            ; >C000-CFFF
+        AI      R12,2
+        LDCR    R0,BYTEWIDE            ; >D000-DFFF
+        PSEL_EN
+        RET
+
+; ------------------------------------------------------------------
+; Step 9G fast logical-byte accessors.
+;
+; The Step 9E C versions are correct but very expensive inside insert/delete:
+; every moved byte enters ebget(), runs several C comparisons, may call ebsel(),
+; returns, then repeats the same machinery through ebput().  These assembly
+; versions preserve exactly the same logical layout and mapper-cache contract
+; while keeping the hot path compact enough not to consume the IOLIB heap.
+;
+; Small-C ABI for a two-argument C call:
+;       second argument @2(SP)   ; last argument is nearest CALL frame
+;       first argument  @4(SP)
+;       int return      R4
+; ------------------------------------------------------------------
+
+; Internal mapper for >9000-BFFF.  R0 = bank 0/1.
+; Updates the C-side ebcurbn cache so ebsel() remains coherent.
+EBM9:
+        C       R0,@ebcurbn
+        JEQ     EBM9_R
+        MOV     R0,@ebcurbn
+        SLA     R0,8
+        PSEL_DIS
+        LI      R12,MAP_WIN_BASE+SEG9_CRU
+        LDCR    R0,BYTEWIDE
+        AI      R12,2
+        LDCR    R0,BYTEWIDE
+        AI      R12,2
+        LDCR    R0,BYTEWIDE
+        PSEL_EN
+EBM9_R:
+        B       *R11
+
+; Internal mapper for >C000-DFFF.  R0 = bank 0/1.
+EBMCD:
+        C       R0,@ebcursh
+        JEQ     EBMCD_R
+        MOV     R0,@ebcursh
+        SLA     R0,8
+        PSEL_DIS
+        LI      R12,MAP_WIN_BASE+SEGC_CRU
+        LDCR    R0,BYTEWIDE
+        AI      R12,2
+        LDCR    R0,BYTEWIDE
+        PSEL_EN
+EBMCD_R:
+        B       *R11
+
+; ebget(pos) -- return the same signed-char int produced by Small-C char loads.
+ebget:
+        MOV     @2(SP),R1
+        C       R1,@ebcap
+        JH      EBG_BAD
+
+        CI      R1,EBBANK
+        JL      EBG_P0
+        CI      R1,EBFIXED
+        JL      EBG_P1
+
+        MOV     @ebheapsz,R0
+        AI      R0,EBFIXED              ; R0 = heap/shell cut
+        C       R1,R0
+        JL      EBG_HEAP
+
+        S       R0,R1                   ; shell-relative offset
+        CI      R1,EBSHELL
+        JHE     EBG_BAD
+        LI      R0,1
+        BL      @EBMCD
+        AI      R1,0C000H
+        JMP     EBG_LOAD
+
+EBG_HEAP:
+        AI      R1,0A000H               ; subtract >6000
+        A       @ebheap,R1
+        JMP     EBG_LOAD
+
+EBG_P1:
+        LI      R0,1
+        BL      @EBM9
+        AI      R1,06000H               ; >3000 -> >9000
+        JMP     EBG_LOAD
+
+EBG_P0:
+        CLR     R0
+        BL      @EBM9
+        AI      R1,09000H               ; logical 0 -> >9000
+
+EBG_LOAD:
+        MOVB    *R1,R4
+        SRA     R4,8
+        RET
+
+EBG_BAD:
+        CLR     R4
+        RET
+
+; ebput(pos,c) -- store low byte of C int c and return 1/0 as before.
+ebput:
+        MOV     @4(SP),R1              ; first C arg: pos
+        MOV     @2(SP),R2              ; second C arg: c
+        C       R1,@ebcap
+        JH      EBP_BAD
+
+        CI      R1,EBBANK
+        JL      EBP_P0
+        CI      R1,EBFIXED
+        JL      EBP_P1
+
+        MOV     @ebheapsz,R0
+        AI      R0,EBFIXED
+        C       R1,R0
+        JL      EBP_HEAP
+
+        S       R0,R1
+        CI      R1,EBSHELL
+        JHE     EBP_BAD
+        LI      R0,1
+        BL      @EBMCD
+        AI      R1,0C000H
+        JMP     EBP_STORE
+
+EBP_HEAP:
+        AI      R1,0A000H
+        A       @ebheap,R1
+        JMP     EBP_STORE
+
+EBP_P1:
+        LI      R0,1
+        BL      @EBM9
+        AI      R1,06000H
+        JMP     EBP_STORE
+
+EBP_P0:
+        CLR     R0
+        BL      @EBM9
+        AI      R1,09000H
+
+EBP_STORE:
+        SWPB    R2
+        MOVB    R2,*R1
+        LI      R4,1
+        RET
+
+EBP_BAD:
+        CLR     R4
+        RET
+
+
+; ------------------------------------------------------------------
+; ebmup0(pos,end) -- leaf insertion mover for bank-0 only.
+; Caller has selected bank 0 and guarantees 0 <= pos < end < >3000.
+; No mapping, no BL/CALL, no stack adjustment: just one backwards MOVB loop.
+; ------------------------------------------------------------------
+ebmup0:
+        MOV     @4(SP),R1              ; pos
+        MOV     @2(SP),R2              ; end (exclusive)
+        MOV     R2,R0
+        S       R1,R0                  ; count = end - pos
+        MOV     R2,R1
+        AI      R1,08FFFH              ; physical source = >9000 + end - 1
+EBU0_LP:
+        MOVB    *R1,@1(R1)
+        DEC     R1
+        DEC     R0
+        JNE     EBU0_LP
+        LI      R4,1
+        RET
+
+; Legacy ehfree/ehlimit/ehclaim entries removed: no active FILEEDIT source references them.
+
+        ENT     ebank
+        ENT     esbank
+        ENT     ebget
+        ENT     ebput
+        ENT     ebmup0
+        EXT     ebcap
+        EXT     ebheap
+        EXT     ebheapsz
+        EXT     ebcurbn
+        EXT     ebcursh
+        END

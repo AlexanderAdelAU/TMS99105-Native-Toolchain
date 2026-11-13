@@ -1,0 +1,70 @@
+FILEEDIT STEP 7.1 -- INTERRUPT-BUFFERED TMS9902 RECEIVE
+======================================================
+
+Problem
+-------
+With blocking BDOS/MONITOR keyboard input, FileEdit did not read the TMS9902
+while repainting a scrolling screen. A VT100 Down sequence ESC [ B could lose
+its leading bytes and leave a literal B to be inserted into the document.
+
+Proving INT4
+------------
+FILEEDIT /I temporarily hooked the INT4 PC vector and programmed the known-
+working TMS9902 interval timer. Eight observed timer interrupts proved that:
+
+  INT4 is the TMS9902 interrupt level on this SBC
+  >0012 is the correct writable handler-PC vector
+  the MONITOR INT4 workspace can be retained
+  LIMI 7 admits the interrupt
+
+Receiver details
+----------------
+The TI TMS9902 example confirms:
+
+  SBO 18   enable receiver interrupts
+  TB 21    receive-buffer-full / receiver condition
+  STCR     drain the received character
+  SBZ 18   inhibit/acknowledge receiver interrupt service
+
+Hardware debugging also exposed two critical TMS9900 rules:
+
+  * interrupt entry switches to the INT4 workspace, so R12 must be loaded
+    explicitly with the serial TMS9902 CRU base >0080;
+  * the normal Small-C SP is not valid in the interrupt workspace. RXISR must
+    be pure assembly: no C, BDOS, stack, terminal-output or overlay calls.
+
+The first working receiver still produced an interrupt storm because bit 18
+was left asserted. A diagnostic WHEX R12 printed >0080 continuously, proving
+that INT4 was firing repeatedly rather than failing to fire. The corrected
+service sequence is:
+
+    SBZ 18
+    STCR received-byte,8
+    queue byte
+    SBO 18
+
+Cooperative INT4 chain
+----------------------
+FileEdit does not own INT4 exclusively. It is a first-stage hook:
+
+    INT4
+      -> FileEdit RXISR
+           service FileEdit's RX condition if present
+           re-arm RX
+           ALWAYS branch to saved previous INT4 handler
+      -> previous handler
+           timer / other INT4 responsibilities
+           RTWP
+
+There is one final RTWP, owned by the previous handler. This means FileEdit can
+add interrupt-buffered serial receive without stealing timer service or other
+INT4 responsibilities from the MONITOR/system.
+
+Queue
+-----
+RXISR deposits bytes into a 64-byte resident circular queue. Mainline TERMIO
+removes bytes later and feeds the existing ANSI key decoder. Screen output and
+keyboard reception are therefore asynchronous: redraw time no longer creates
+a receive blind spot.
+
+Normal exit disables FileEdit RX IRQs and restores the previous INT4 vector.

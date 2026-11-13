@@ -1,0 +1,11 @@
+; OVL_P4T.A99 -- page-4 overlay smoke test
+
+        DXOP    RET,7
+
+        AORG    08000H
+
+P4T:
+        RET
+
+        ENT     P4T
+        END

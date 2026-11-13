@@ -1,0 +1,43 @@
+FILEEDIT CURRENT-LINE REDRAW FAST PATH
+======================================
+
+Problem
+-------
+OVL_EDIT previously returned edflag=1 after every printable character, TAB,
+Backspace and Delete.  EDITCTL interpreted that as a full OVL_VIEW pass, so a
+one-character edit retransmitted the complete 20-row page over the serial link.
+
+Change
+------
+edflag now has four states:
+
+  0  cursor/status only; no document repaint
+  1  full viewport repaint
+  2  exit editor
+  3  repaint current document line only
+
+Printable characters, TAB, Backspace and Delete request state 3.  Enter and
+Save retain state 1.
+
+EDITCTL remembers etotal across each edit operation.  If Backspace or Delete
+removed a CR, etotal changes and EDITCTL promotes state 3 to state 1 before the
+next render.  Thus a line join still repaints the whole viewport, while an edit
+that remains within one logical line uses the fast path.
+
+OVL_EDIT also promotes state 3 to state 1 if etop or eleft changes.  Vertical
+viewport motion or horizontal scrolling affects more than the current row.
+
+For a state-3 redraw EDITCTL positions EDITBUF's shared vidx at eline and calls
+OVL_VIEW.  OVL_VIEW detects edflag==3 and calls its existing vline() renderer
+for only terminal row 3+(eline-etop).  The title, rules, neighbouring rows and
+footer are untouched.
+
+Result
+------
+Normal typing, TAB, same-line Backspace and same-line Delete repaint at most one
+73-column editor row instead of the complete page.  Cursor-only navigation is
+unchanged and still avoids document repaint unless it moves the viewport.
+
+The [MOD] marker in the title may become visible on the next full viewport
+redraw rather than on the first character edit.  ebdirty itself is set
+immediately; only that title decoration is deferred by the fast path.

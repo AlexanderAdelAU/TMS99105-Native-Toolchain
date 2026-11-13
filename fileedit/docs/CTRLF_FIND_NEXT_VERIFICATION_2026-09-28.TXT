@@ -1,0 +1,72 @@
+FILEEDIT99 Ctrl-F modal Find-Next candidate — verification
+==========================================================
+Date: 28 September 2026
+
+Base
+----
+SBC_FileEdit99_CTRLF_FIND_candidate_2026-09-27
+The user reported the basic Ctrl-F candidate works on SBC hardware.
+
+Agreed behavior
+---------------
+* Ctrl-F enters Find mode.
+* Row 24 remains dedicated to "Find: <term>" while Find mode is active.
+* Enter or Ctrl-F finds the next occurrence.
+* After a successful match, the next search begins at match+1.
+* This permits overlapping matches (e.g. AA in AAAA -> positions 0,1,2).
+* The document view is redrawn around each match while Find remains active.
+* Esc exits Find mode and restores the normal editor/status interface.
+* Backspace/Delete edit the search term.
+* Editing the term resets the starting point to the current document cursor.
+* Search is case-sensitive, forward-only, non-wrapping, max 32 characters.
+* Not found displays [Not found] on row 24 and leaves Find mode active.
+* Find never modifies document bytes.
+
+Implementation
+--------------
+Find remains wholly inside OVL_VIEW for the duration of the modal session.
+The search pattern is local to vfind(); no new resident search buffer/state is
+required.  The existing edflag=4 dispatch remains unchanged.
+
+Clean build verification
+------------------------
+Small-C compile: pass, Errors: 0
+R99 assembly: pass
+DREL overlay-chain lint: pass
+DREL resident-chain lint: pass
+LINK99: pass
+
+Overlay sizes (chain-safe limit >0FC0):
+  OVL_VIEW = >0F48  (120 bytes free)
+  OVL_EDIT = >0F60  (96 bytes free)
+
+Object comparison versus working basic Ctrl-F candidate:
+  CHANGED:   OVL_VIEW.R99 only
+  IDENTICAL: every other comparable .R99 object, including:
+             EBMAP.R99, EDITBUF.R99, OVL_EDIT.R99,
+             EDITCTL.R99, OVLAPI.R99
+
+Search-next semantic model: PASS
+  AAAA / AA       -> 0,1,2
+  one two one two -> 0,8
+  abcabc / abc    -> 0,3
+
+FILEEDIT.EXE
+------------
+Size:   37280 bytes
+SHA256: 76b090ea72497739f802512184e4c39d23c25b97231f0530cfa26ecae33dd17c
+
+Suggested SBC validation
+------------------------
+1. FILEEDIT TEST.C /E.
+2. Ctrl-F, type a term with several occurrences, Enter repeatedly; verify each
+   press advances to the next occurrence without leaving Find mode.
+3. Press Ctrl-F while Find mode is already active; verify it also finds next.
+4. Test overlapping text if convenient (e.g. AA in AAAA).
+5. Search for an absent term; verify [Not found] remains on the Find line and
+   Esc returns normally to the editor.
+6. Backspace/edit the term and verify the new term searches from the current
+   match/cursor.
+7. Esc from Find and verify line/column status returns.
+8. Type/edit normally afterward and confirm the validated no-delay insertion
+   behavior remains intact.

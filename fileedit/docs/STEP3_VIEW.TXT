@@ -1,0 +1,177 @@
+NOTE: Historical Step 3 design note.  Step 3.3/3.4 supersede the input and redraw details below.
+
+FILESTAT editor evolution
+Step 3: screen-oriented viewer and raw Tera Term navigation
+============================================================
+
+Goal
+----
+Step 2 proved that the resident application can accept console input, dispatch
+an overlay, return from it, and continue at the menu.  Step 3 turns OVL_VIEW
+from a scrolling file dump into the first real screen-oriented editor surface.
+
+Run either:
+
+    FILESTAT SAMPLE.TXT /V
+
+or:
+
+    FILESTAT SAMPLE.TXT /E
+
+and choose V from the editor menu.
+
+Screen layout
+-------------
+The viewer assumes an 80 x 24 Tera Term display for this milestone:
+
+    row 1       reverse-video title / filename
+    row 2       blank separator
+    rows 3-22   twenty logical file lines
+    row 23      blank separator
+    row 24      reverse-video position/help bar
+
+Long source lines are consumed completely but clipped at column 80 so terminal
+wrapping cannot destroy the fixed layout.  Tabs are displayed as four spaces.
+Control bytes are displayed as '.' instead of being allowed to act on the
+terminal.
+
+Navigation
+----------
+The preferred Tera Term keys are:
+
+    Up          move the top line up by one
+    Down        move the top line down by one
+    PgUp        move up twenty lines
+    PgDn        move down twenty lines
+    Home        return to line 1
+    Q           leave the viewer
+
+Letter fallbacks are also provided for hardware diagnosis:
+
+    U           up one line
+    D           down one line
+    P           page up
+    N           page down
+    H           home
+    Q           quit
+
+The viewer accepts the common VT100 cursor sequences ESC [ A/B and the
+application-cursor form ESC O A/B.  PgUp/PgDn use ESC [ 5~ and ESC [ 6~.
+Home accepts ESC [ H, ESC O H and ESC [ 1~.
+
+Raw/no-echo keyboard service
+----------------------------
+TERMIO remains resident and now exports:
+
+    trmraw()
+
+It uses the same resident CBDOS.R99 wrapper already proven by Step 2, but calls
+CP/M-compatible BDOS function 6 with E=>FF:
+
+    _bdos(6, 255)
+
+That service is direct console input: zero means no byte is ready; a non-zero
+value is the byte and is not echoed.  trmraw() polls until a byte arrives.
+This gives OVL_VIEW the raw ESC, '[', 'A', etc. bytes sent by Tera Term.
+
+The original trmkey() function-1 input-with-echo service is retained for the
+resident menu and statistics pause because that path is already proven on the
+physical SBC.  This makes the new raw-input experiment isolated to OVL_VIEW.
+
+Cursor/display services
+-----------------------
+TERMIO also gains reusable resident primitives:
+
+    trmpos(row,col)    ANSI absolute cursor position
+    trmclrln()         clear current line
+    trmhide()          hide cursor
+    trmshow()          show cursor
+    trmnum(n)          small decimal-number output helper
+
+These are resident intentionally.  Future edit/find/help overlays should share
+the same terminal API rather than carrying duplicate escape-sequence code.
+
+File model for this milestone
+-----------------------------
+There is deliberately no editor text buffer yet.
+
+When the viewer starts, it makes one pass through the file to count logical
+lines.  On each redraw it rewinds the resident file and skips to the requested
+top line, then displays at most twenty lines.
+
+This is not the final high-performance editor model, but it has useful tutorial
+properties:
+
+  * no persistent editable data has to be invented yet;
+  * scrolling state is temporary and safely lives inside OVL_VIEW;
+  * the resident filename/file API is reused unchanged;
+  * the screen-navigation problem is proven independently of the future buffer.
+
+The final top line is clamped so a short last page remains filled whenever the
+file contains at least twenty lines.
+
+Overlay architecture
+--------------------
+No overlay assignment changes in Step 3:
+
+    ID 1  OVL_WORD   physical page 2
+    ID 2  OVL_CHAR   physical page 3
+    ID 3  OVL_RPT    physical page 4
+    ID 4  OVL_VIEW   physical page 5
+
+All execute mutually exclusively in virtual >8000->8FFF.  TERMIO/FILEIO and
+the resident menu remain below >8000 and survive overlay changes.
+
+Important direct-viewer change
+------------------------------
+/V is now interactive.  It no longer streams to EOF and immediately exits.
+Use Q to leave the screen viewer and return to the shell.
+
+Hardware test sequence
+----------------------
+1. Build the project normally.
+2. Start the direct viewer:
+
+       FILESTAT TEST.C /V
+
+3. Confirm title is fixed on row 1, source occupies rows 3-22, and the status
+   bar appears on row 24.
+4. Press D and U.  Confirm one-line navigation works without echo.
+5. Press N and P.  Confirm page navigation works.
+6. Press H.  Confirm the display returns to line 1.
+7. Press the actual Tera Term Up/Down keys.
+8. Press PgUp/PgDn and Home.
+9. Press Q.  Confirm the cursor is restored and control returns to the shell.
+10. Start the menu path:
+
+       FILESTAT TEST.C /E
+
+11. Select V.  Repeat a few navigation tests and press Q.  Confirm the resident
+    editor menu returns immediately (there is no extra viewer pause now).
+12. Select S.  Confirm the original FILESTAT statistics command still works.
+13. Regression-test:
+
+       FILESTAT TEST.C
+       FILESTAT TEST.C /L
+
+Diagnostic interpretation
+-------------------------
+If U/D/P/N/H/Q work but the physical cursor/Pg keys do not, raw BDOS input is
+working and only Tera Term's emitted escape sequence differs.  Capture the
+bytes/behaviour and extend vkey(); do not change the mapper or file layer.
+
+If entering V displays the screen but no key of any kind is accepted, the new
+BDOS function-6 path is the suspect.  Step 2 already proved BDOS function 1,
+so the overlay architecture remains valid.
+
+If DREL reports OVL_VIEW over the one-page >0FC0 chain-safe limit, report its
+exact MODULE size.  The next correction should move generic rendering helpers
+resident or split viewer responsibilities; do not silently increase the
+>8000 overlay window.
+
+Next milestone
+--------------
+After raw navigation is proven, introduce resident editor state and the first
+persistent text-buffer strategy.  The attractive next memory experiment is to
+use mapper-controlled segments >9000->BFFF as editor data pages while keeping
+>8000->8FFF as the executable overlay window.

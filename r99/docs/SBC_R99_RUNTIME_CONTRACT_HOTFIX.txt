@@ -1,0 +1,57 @@
+SBC_R99 RUNTIME CONTRACT HOTFIX - 2026-09-19
+==============================================
+
+Observed target failure
+-----------------------
+  R99 STRESS
+  Available memory = 3684 bytes
+  Error closing source.
+  ERROR: INVALID UNIT NUMBER
+
+Cause
+-----
+R99GET still carried the historical seek() shim which rewound the source by
+closing it and opening it again.  That code was born with IOLIB99's historical
+non-standard fclose contract (1 success / 0 failure).  The corrected runtime
+uses the C contract (0 success / EOF failure).  The close/reopen shim therefore
+remained an unnecessary coupling point between R99 and the old ABI, and the
+observed run proves that coupling was still surfacing in the deployed image.
+
+Correction
+----------
+* Removed R99GET's private seek(fd,i,j) close/reopen shim.
+* source_rewind() now keeps the source unit open and calls
+      lseek(sorbuf.fd, 0, 0)      /* SEEK_SET */
+  between assembler passes.
+* Removed the redundant rewind immediately after fopen(): a newly opened file
+  is already positioned at byte zero.
+* IOSEEK is now rebuilt from IOSEEK.C with -DASMVER and linked explicitly.
+  Its compact TMS9900 implementation is 434 bytes and resets text CR/LF state
+  whenever it repositions a read stream.
+* flush()/rflush() set diskbuf.fd to NOFILE immediately after fclose, before
+  error cleanup, so wipeout() cannot double-close a unit.
+* The normal final source close also marks sorbuf.fd = NOFILE.
+
+Build guards
+------------
+The PowerShell build now:
+* checks the actual fclose() body in IOOPEN.C for 0/EOF semantics;
+* rejects a reintroduced fclose-based R99 source rewind;
+* requires source_rewind() to use lseek;
+* rebuilds IOSEEK.R99 from source rather than accepting a stale object; and
+* checks the DREL dump contains fresh fclose and lseek exports before LINK99.
+
+Text/literal contract
+---------------------
+No newline policy was changed by this hotfix.  R99 source text still receives
+logical LF from IOLIB99; physical CRLF normalization remains in the text I/O
+layer; relocatable .R99 output remains binary/raw.
+
+Expected target smoke test
+--------------------------
+  R99 STRESS
+
+The assembler should complete both passes without "Error closing source" or
+"INVALID UNIT NUMBER".  A listing build is also worth checking because it adds
+another open output unit:
+  R99 STRESS L

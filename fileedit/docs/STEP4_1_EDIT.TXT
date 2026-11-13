@@ -1,0 +1,92 @@
+FILESTAT TEXT EDITOR -- STEP 4.1: IN-MEMORY EDITING
+===================================================
+
+Purpose
+-------
+
+Step 4 proved that a persistent text buffer at >9000-BFFF can survive repeated
+OVL_VIEW mappings at >8000.  Step 4.1 makes that buffer editable, but still
+contains NO disk-write path.  Separating memory editing from Save keeps the
+first destructive operation out of the experiment until editing semantics are
+known-good on the real SBC.
+
+Architecture
+------------
+
+Resident EDITBUF now supplies:
+
+    ebindex(line,col)   translate cursor position to buffer index
+    ebins(pos,c)        insert one byte, shifting text right
+    ebdel(pos)          delete one byte, shifting text left
+    ebdirty             0 clean / 1 modified
+
+EDITCTL remains resident and owns:
+
+    cursor line/column
+    viewport top/left
+    ANSI key decoding
+    insertion/deletion/line splitting
+    the editor lifetime loop
+
+OVL_VIEW remains a one-frame renderer.  It does not read the keyboard and it
+does not own edit state.
+
+No fifth overlay was added.  Segment 8 still has exactly four code alternatives:
+
+    OVL_WORD   page 2
+    OVL_CHAR   page 3
+    OVL_RPT    page 4
+    OVL_VIEW   page 5
+
+Editor key policy
+-----------------
+
+Step 4 used U/D/L/R/P/N/H/E letter fallbacks for navigation while the buffer
+was read-only.  Those fallbacks cannot coexist with text entry.  Step 4.1
+therefore uses the real Tera Term VT100 keys only:
+
+    Arrow keys       move cursor
+    PgUp/PgDn        move 20 lines
+    Home/End         beginning/end of line
+    Backspace        delete left; at col 1 joins previous line
+    Delete           delete at cursor; at EOL joins next line
+    Enter            split line
+    Ctrl-X           return to menu
+    ASCII 32..126    insert as ordinary text
+
+Ctrl-X is used instead of Ctrl-Q because Ctrl-Q is XON and may be consumed by
+serial flow-control configurations.  Q itself is now ordinary editable text.
+
+Line model
+----------
+
+The read-only FILESTAT/viewer line count remains the physical file count used
+by the original program.  The editor exposes a final empty cursor line when a
+file ends in CR.  This makes line splitting and insertion at EOF natural and
+is typical of screen editors.
+
+Dirty state
+-----------
+
+The title bar shows:
+
+    [MEM]   clean memory image
+    [MOD]   one or more successful edits occurred
+
+The dirty flag survives overlay swaps because it is resident.  It is reset by
+loading a file.  Step 4.1 deliberately does nothing with that flag on disk.
+
+Buffer-full behaviour
+---------------------
+
+The fixed arena permits 12287 text bytes plus the sentinel at >BFFF.  An
+insert into a full buffer is rejected and TERMIO emits BEL.  Existing text is
+left untouched.
+
+Why Save is not in this step
+----------------------------
+
+Save will need separate decisions about file replacement, failure recovery,
+line-ending representation and dirty-state reset.  Those deserve a hardware
+milestone of their own.  Step 4.1 can therefore be stress-tested freely:
+editing can corrupt only the temporary RAM image, never TEST.C on disk.

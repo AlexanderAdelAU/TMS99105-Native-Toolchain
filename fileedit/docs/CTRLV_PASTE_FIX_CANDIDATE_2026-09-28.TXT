@@ -1,0 +1,74 @@
+FILEEDIT99 CTRL-V PASTE FIX CANDIDATE -- 2026-09-28
+=======================================================
+
+STATUS
+------
+Hardware candidate based on the hardware-validated Ctrl-F Find/Cursor build.
+This supersedes the first Ctrl-V Paste candidate, which is REJECTED because
+its footer exceeded column 79 and caused Tera Term to auto-wrap/scroll the
+screen, corrupting the apparent line/status layout.
+
+ROOT CAUSE OF DISPLAY REGRESSION
+--------------------------------
+The first Paste footer began at column 27 and was 56 characters long, ending
+at column 82.  FILEEDIT deliberately leaves column 80 unused to prevent VT100
+terminal auto-wrap.  The overflow wrapped onto the next terminal row and
+scrolled the screen, producing duplicated/mangled Ln/Col status and an
+apparently displaced cursor.
+
+The corrected footer is exactly 53 characters and ends at column 79:
+  Nav Home End PgUp/Dn ^F Find ^V Paste ^O Save ^X Menu
+
+PASTE OPERATION
+---------------
+Ctrl-V on the SBC cannot read the Windows clipboard.  It arms FILEEDIT to
+receive a terminal paste and displays:
+  PASTE: use Edit>Paste, Esc finish
+
+Then use Tera Term Edit -> Paste (or the terminal's configured Paste command)
+to transmit clipboard text.  Press Esc after transmission completes.
+
+Paste mode:
+  - suppresses per-character redraw
+  - accepts printable ASCII and TAB
+  - normalizes CR, LF and CRLF to FILEEDIT internal CR newlines
+  - uses the existing ebins() editor insertion path
+  - performs one full redraw after Esc
+  - leaves the editor cursor at the end of inserted text
+  - reports receive-queue overrun instead of silently accepting lost bytes
+
+VERIFICATION
+------------
+Two independent clean Linux-host rebuilds are byte-for-byte identical.
+Only OVL_VIEW.R99 and OVL_PASTE.R99 differ from the first Paste candidate;
+37 other comparable R99 objects are byte-for-byte identical, including:
+  EBMAP.R99
+  EDITBUF.R99
+  EDITCTL.R99
+  OVL_EDIT.R99
+  CONRX.R99
+
+DREL overlay-chain lint: PASS
+DREL resident-chain lint: PASS
+LINK99: PASS
+
+Overlay sizes:
+  OVL_VIEW   >0FA6   (26 bytes under >0FC0 limit)
+  OVL_EDIT   >0F9C   (36 bytes under >0FC0 limit)
+  OVL_PASTE  >0416   (2986 bytes under >0FC0 limit)
+
+FILEEDIT.EXE
+  size: 38958 bytes
+  SHA-256: 2d694bd500b6d8530979d335a1a8bde7264c310cfc5c4f0f4a760617868c4615
+
+SBC TEST
+--------
+1. FILEEDIT TEST.C /E
+2. Confirm the footer/status display is stable and does not wrap.
+3. Position the cursor in the document.
+4. Press Ctrl-V.
+5. When 'PASTE: use Edit>Paste, Esc finish' appears, choose Tera Term
+   Edit -> Paste to transmit clipboard text.
+6. After the paste completes, press Esc.
+7. Verify inserted text, line structure, cursor position and Ln/Col status.
+8. Save, exit and reopen to verify persistence.

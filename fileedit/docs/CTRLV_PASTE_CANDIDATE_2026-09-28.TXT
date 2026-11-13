@@ -1,0 +1,122 @@
+FILEEDIT99 CTRL-V PASTE CANDIDATE -- 2026-09-28
+===================================================
+
+STATUS
+------
+Hardware candidate based on the hardware-validated Ctrl-F Find/Cursor build.
+Not promoted until verified on the SBC.
+
+USER INTERFACE
+--------------
+  Ctrl-V              enter Paste mode
+  terminal Paste      send clipboard text as ordinary serial input
+  Esc                 finish Paste mode and return to normal editor
+
+While Paste mode is active the status line shows:
+
+  PASTE - Esc to finish
+
+The editor deliberately does not repaint after each pasted byte.  When Esc is
+pressed, EDITCTL performs one full redraw and the cursor is left at the end of
+the inserted text.
+
+INPUT NORMALIZATION
+-------------------
+  printable ASCII     inserted
+  TAB (09)            inserted as a real TAB
+  CR                   inserted as one editor newline (internal CR)
+  LF                   inserted as one editor newline
+  CRLF                 inserted as ONE editor newline (LF half suppressed)
+  Esc                  ends Paste mode; it is not inserted
+  other controls       ignored
+
+Consecutive LF-only and CR-only lines remain consecutive; only the LF directly
+following a CR is suppressed.
+
+RX QUEUE / SAFETY
+-----------------
+The interrupt-driven TMS9902 receive ring is enlarged from 64 to 256 bytes.
+An exported overflow counter is sampled at Paste-mode entry.  If the interrupt
+queue overruns during the paste, FILEEDIT displays:
+
+  PASTE INPUT OVERRUN - press any key
+
+This prevents silent acceptance of a paste known to have lost input bytes.
+If EDITBUF becomes full, Paste mode displays:
+
+  PASTE - BUFFER FULL - Esc to finish
+
+and continues draining terminal input until Esc so trailing clipboard bytes do
+not escape into the normal editor command loop.
+
+ARCHITECTURE
+------------
+A new single-page OVL_PASTE overlay is assigned:
+  overlay ID 6
+  physical page 7
+  virtual segment 8 (>8000-8FFF)
+
+OVL_EDIT only recognises Ctrl-V and returns edflag=5.  Resident EDITCTL maps
+OVL_PASTE, which owns the modal paste loop.  On return EDITCTL requests a full
+OVL_VIEW redraw.  OVL_PASTE inserts through the existing ebins() API; the
+hardware-validated buffer representation and bank-0 insertion leaf are not
+modified.
+
+BUILD / PAGE BUDGETS
+--------------------
+DREL overlay-chain lint: PASS
+DREL resident-chain lint: PASS
+LINK99: PASS
+
+  OVL_VIEW   >0FAA   22 bytes below >0FC0 chain-safe limit
+  OVL_EDIT   >0F9C   36 bytes below >0FC0 chain-safe limit
+  OVL_PASTE  >0410   2992 bytes below >0FC0 chain-safe limit
+
+Resident image ends approximately at >78A0 before overlay pages, leaving about
+1888 bytes to >8000.  EDITBUF still reserves 1096 bytes for IOLIB, leaving a
+positive conventional-heap margin.
+
+OBJECT COMPARISON AGAINST HARDWARE-VALIDATED FIND/CURSOR BASELINE
+-----------------------------------------------------------------
+Unchanged byte-for-byte includes:
+  EBMAP.R99
+  EDITBUF.R99
+  FILEIO.R99
+  FILESTAT.R99
+  EDITMENU.R99
+  TERMIO.R99
+  VIEWCTL.R99
+  OVL_WORD.R99
+  OVL_CHAR.R99
+  OVL_RPT.R99
+
+Expected changes:
+  CONRX.R99       256-byte queue + exported overflow counter
+  EDITCTL.R99     dispatch edflag=5 to runpaste
+  OVLAPI.R99      runpaste overlay adapter
+  OVLMGR.R99      generated overlay table grows by one row
+  OVL_EDIT.R99    Ctrl-V recognition/dispatch
+  OVL_VIEW.R99    footer advertises ^V Paste
+  OVL_PASTE.R99   new paste implementation
+
+REPRODUCIBILITY
+---------------
+Two independent clean Linux-host rebuilds produced byte-identical FILEEDIT.EXE.
+
+FILEEDIT.EXE
+  size: 38952 bytes
+  SHA-256: fd80d39056dbbde8d2ef02875ef130410afd3712596d19ac7021b5139381e757
+
+SBC HARDWARE TEST
+-----------------
+1. FILEEDIT TEST.C /E
+2. Move into the middle of a line.
+3. Press Ctrl-V; verify PASTE - Esc to finish appears.
+4. Paste several lines containing ordinary CRLF text from the host terminal.
+5. Press Esc.
+6. Verify pasted text appears at the insertion point with no extra blank lines.
+7. Verify the cursor is at the end of the pasted text.
+8. Save, exit, reopen and verify line structure/content.
+9. Repeat with a larger block in LARGE30.TXT and confirm no INPUT OVERRUN.
+10. Confirm normal typing, Ctrl-F Find/Find Next, Ctrl-O Save and Ctrl-X Menu
+    still behave as before.

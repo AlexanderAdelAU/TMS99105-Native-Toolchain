@@ -1,0 +1,15 @@
+COMMONLIBRARY BASELINE
+======================
+
+The files under common/ are copied from the supplied top-level CommonLibrary
+baseline and are treated as authoritative inputs for SBC LINK99 development.
+The older nested CommonLibrary/CommonLibrary copy is intentionally omitted.
+
+  common/Includes/   canonical public headers, including rel99.h and
+                     rel99_format.h
+  common/rel99/      GETREL.c, PUTREL.c, SEEREL.c
+  common/cfunctions/ shared Small-C helper implementations
+
+Do not create LINK99-private copies of REL item values.  New linker code must
+include/use the common definitions so GETREL, PUTREL, SEEREL and LINK99 remain
+one format family.

@@ -1,0 +1,53 @@
+FILEEDIT IOLIB99(7) CR/LF BOUNDARY FIX
+======================================
+
+Observed hardware result
+------------------------
+After the EBMAP ebput() ABI fix, TEST.C text bytes were correct but every
+source line appeared concatenated into line 1.
+
+Cause
+-----
+Current IOLIB99 text input follows C text-stream semantics:
+
+  physical CRLF -> logical LF (10)
+  physical CR   -> logical LF (10)
+  physical LF   -> logical LF (10)
+
+FILEEDIT's editor buffer predates that correction and deliberately uses CR
+(13) as its internal line delimiter.  EDITBUF.C was still discarding byte 10
+as if it were the physical LF half of CRLF.  With IOLIB99(7), that byte is the
+one and only logical newline, so the loader removed every line break.
+
+Correction
+----------
+Keep the established internal CR representation and translate only at the
+I/O boundary:
+
+  load:   IOLIB LF (10) -> EDITBUF CR (13)
+  save:   EDITBUF CR (13) -> IOLIB LF (10) -> physical CRLF
+  verify: IOLIB LF (10) -> EDITBUF CR (13) before comparison
+  backup: pass IOLIB's normalized stream directly to text putc()
+
+The capacity pass now counts every logical character instead of dropping LF.
+The rest of the editor (line seeking, Enter, renderer, cursor and delete code)
+continues to use CR internally and does not need to change.
+
+IOLIB confirmation
+------------------
+The supplied IOLIB99(7) IOREAD.C explicitly normalizes CRLF, CR-only and
+LF-only input to LF.  IOWRITE.C expands logical LF to physical CRLF in text
+mode.  The FILEEDIT project-local IOLIB objects are byte-for-byte identical
+to the supplied IOLIB99(7) build objects.
+
+Hardware regression
+-------------------
+1. Rebuild FILEEDIT.
+2. Run: FILEEDIT TEST.C /E
+3. Confirm each source line occupies its own editor row.
+4. Modify a line and Save.
+5. Re-open the file and confirm line layout is unchanged.
+6. Check the saved file with a raw/hex dump if desired: line endings should be
+   physical 0D 0A (CR LF), not CR-only.
+7. Also test one CR-only and one LF-only input file; both should load as normal
+   editor lines and save back as canonical CRLF text.

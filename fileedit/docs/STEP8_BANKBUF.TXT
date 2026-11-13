@@ -1,0 +1,88 @@
+FILEEDIT -- STEP 8: 24 KB BANKED EDITOR BUFFER
+==============================================
+
+Purpose
+-------
+The Step 7 editor stored the complete document in one fixed virtual arena:
+
+    >9000-BFFE   12287 text bytes
+    >BFFF        NUL sentinel
+
+That made Open/Edit reject files above roughly 12 KB even though the SBC
+mapper can present another physical RAM page through the same virtual
+segments.  Step 8 uses that spare mapper page and keeps the shell/BDOS area at
+>C000-FFFF untouched.
+
+New logical editor image
+------------------------
+Segments 9-11 (>9000-BFFF) are now a 12 KB window over two physical pages:
+
+    logical     0-12287   -> segments 9-11, physical page 0
+    logical 12288-24575   -> segments 9-11, physical page 1
+
+The last logical byte is reserved for the NUL sentinel, so maximum editable
+text is 24575 bytes.
+
+Why the limit is 24575 rather than a larger bank count
+------------------------------------------------------
+Small-C/Plus uses 16-bit signed int indexes throughout this editor.  A 24 KB
+document remains comfortably below +32767 and therefore does not require a
+large-index rewrite of cursor positions, file lengths, line positions and
+save verification.
+
+Mapper isolation
+----------------
+EBMAP.A99 changes only mapper registers for virtual segments 9, 10 and 11.
+Segment 8 (>8000-8FFF), where OVL_WORD/CHAR/RPT/VIEW/EDIT execute, is never
+changed by the data mapper.  >C000-FFFF is never mapped or used as editor RAM.
+
+EDITBUF abstraction
+-------------------
+Direct ebbase[index] access outside EDITBUF has been removed.  Resident
+EDITBUF now exports:
+
+    ebget(pos)       read one logical document byte
+    ebput(pos,c)     write one logical document byte
+    ebhome()         restore page 0 in segments 9-11
+
+The bank boundary is hidden from the rest of the program.  Insert/delete can
+therefore shift bytes across logical position 12288 without special cases in
+the editor overlay.
+
+Affected paths
+--------------
+The following paths now use the banked accessors:
+
+    Open/load and NUL termination
+    logical-line scanning and cursor indexing
+    insertion and deletion
+    EDITCTL tab/visual-column scanning
+    OVL_VIEW rendering
+    Save/Save As writes
+    post-write verification
+
+Page 0 is restored after viewer/editor lifetimes, after banked save/verify,
+and before returning from the direct /E or /V paths.
+
+Build change
+------------
+make_SBC_FileEdit99.ps1 now assembles EBMAP.A99, includes EBMAP.R99 in the
+resident DREL chain lint, and links it into FILEEDIT.EXE.
+
+Hardware tests
+--------------
+1. Rebuild on the normal Windows/SBC toolchain.
+2. Open tests\LARGE16.TXT.  This file is deliberately larger than the old
+   12287-byte limit and smaller than the new 24575-byte limit.
+3. Navigate and edit near the beginning, around byte 12288, and near EOF.
+4. Insert and delete across the 12 KB boundary.
+5. Save, exit, reopen and compare the file.
+6. Confirm a file larger than 24575 normalized text bytes is rejected without
+   destroying the document already in RAM.
+7. Quit to the shell and run a normal command to confirm page-0 restoration.
+
+Important deployment note
+-------------------------
+The project-local Windows build tools must rebuild FILEEDIT.EXE.  The archived
+binary supplied with the Step 7 project is not changed merely by editing these
+source files.

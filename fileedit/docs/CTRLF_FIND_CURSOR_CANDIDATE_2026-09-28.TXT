@@ -1,0 +1,53 @@
+FILEEDIT99 Ctrl-F visible match cursor candidate
+===============================================
+Date: 28 September 2026
+
+Base
+----
+SBC_FileEdit99_CTRLF_FIND_NEXT_candidate_2026-09-28
+The user reported this Find-Next candidate works well on SBC hardware.
+
+Change
+------
+After a successful Find, the logical editor cursor was already positioned at
+match start, but the visible terminal cursor remained on the Find prompt while
+Find mode waited for the next key.
+
+This candidate keeps the Find prompt on row 24 but, after a successful match,
+places the visible terminal cursor on the first character of the match before
+waiting for Enter / Ctrl-F / Esc.
+
+If the search pattern is edited with Backspace/Delete or printable input, the
+visible cursor returns to the Find prompt. Esc exits Find mode with the editor
+cursor still positioned at the match start.
+
+Search semantics are unchanged:
+* case-sensitive
+* forward only
+* no wrap-around
+* Enter or Ctrl-F = find next
+* next search starts at match+1
+* overlapping matches remain supported
+* Esc exits Find mode
+
+Build verification
+------------------
+Small-C: Errors 0
+R99: No errors
+DREL overlay chain: pass
+DREL resident chain: pass
+LINK99: pass
+
+Overlay sizes (chain-safe limit >0FC0):
+  OVL_VIEW = >0FA6  (26 bytes free)
+  OVL_EDIT = >0F60  (96 bytes free)
+
+Object comparison versus working Find-Next candidate:
+  CHANGED: OVL_VIEW.R99 only
+  IDENTICAL: all other 38 comparable R99 objects, including EBMAP.R99,
+             EDITBUF.R99, OVL_EDIT.R99, EDITCTL.R99, OVLAPI.R99.
+
+FILEEDIT.EXE
+------------
+Size: 37280 bytes
+SHA256: 6e9ffde8894667684fc07a3356d9bb0f7825cca932cd8adaa943f57f8c2b4f5f

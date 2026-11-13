@@ -1,0 +1,92 @@
+SBC LINK99 - ARCHITECTURE PLAN
+==============================
+
+PURPOSE
+-------
+Rebuild the SBC linker from the small LNK.C ancestor rather than forcing the
+large Windows LINK99 implementation into a memory model it was not designed
+for.
+
+The current Windows LINK99 remains the reference/oracle.  The CommonLibrary
+REL definitions are authoritative for all new tools.
+
+PROJECT MEMORY MODEL
+--------------------
+The linker is overlay-aware from the start, even while the first milestones
+are entirely resident.
+
+Persistent state must never live in a disposable overlay.  Persistent state
+will eventually include:
+
+  current output / location counters
+  module directory
+  symbol table
+  unresolved-reference state
+  overlay directory
+  filenames / file state
+  diagnostics / error state
+
+Candidate disposable passes:
+
+  REL ingest
+  resolver
+  library scanner
+  emitter
+  map/diagnostics
+
+TARGET PROGRAM MODEL
+--------------------
+The target executable model distinguishes module identity from virtual
+address.  An overlay symbol is conceptually identified by:
+
+  module_id + section/class + offset
+
+rather than by virtual address alone.  Multiple overlay modules may therefore
+be linked for the same execution window without becoming indistinguishable.
+
+Planned target layout:
+
+  resident image
+  executable metadata
+  zero or more overlay images
+  overlay directory (page/storage identity, virtual base, size, offset)
+
+Step 1 does not emit this format.  The structures are planned now so that
+later overlay support does not require a redesign.
+
+MILESTONES
+----------
+Step 0  Project/build bootstrap; create a runnable SBC LINK99.EXE stub.
+Step 1  Canonical REL reader/dump using CommonLibrary definitions.
+Step 2  Multiple resident REL modules; contiguous placement.
+Step 3  Program-relative relocation and SETLC/AORG handling.
+Step 4  Entry points and grouped external references/XREFS.
+Step 5  Full external-symbol resolution.
+Step 6  Emit and execute a resident SBC executable.
+Step 7  Add RESIDENT/OVERLAY module classes.
+Step 8  Emit several modules linked at one virtual overlay window.
+Step 9  Libraries.
+Step 10 Overlay the LINKER itself only if measured resident size requires it.
+
+RULES
+-----
+1. CommonLibrary REL definitions are canonical; LINK99 must not fork them.
+2. build/ is disposable; source is never generated back into src/.
+3. dist/ contains final deliverables only.
+4. Host tools are staged into build/ before execution.
+5. The Windows linker is staged as HOSTLINK99.EXE to avoid colliding with the
+   target output LINK99.EXE on a case-insensitive filesystem.
+6. Overlay boundaries are based on state lifetime and pass ownership, not on
+   arbitrary source-file size.
+
+OVERLAY OWNERSHIP / INITIALISATION
+----------------------------------
+LINK99 distinguishes callable executable overlays from mapped data banks.
+OVLMGR uses virtual segment 8 to establish CUR_WINA_ID, so every callable
+executable overlay must own segment 8. A mapping that does not own segment 8
+is data-only and must never be entered as code.
+
+OVLMGR_INIT is mandatory before the first mapping and explicitly resets
+CUR_WINA_ID as well as the per-segment page/ID caches. The build script parses
+the generated overlay table and rejects executable overlays that violate the
+segment-8 ownership rule. See OVERLAY_OWNERSHIP_CONTRACT.TXT.

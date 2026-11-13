@@ -1,0 +1,52 @@
+FILESTAT -> TEXT EDITOR
+Step 1.1: viewer CR/LF correction
+==================================
+
+Observed hardware result
+------------------------
+OVL_VIEW mapped and ran correctly, but the Tera Term capture showed a blank
+line after every line of the viewed source file.
+
+Cause
+-----
+Small-C/Plus represents '\n' as CR (13).  IOLIB fgetc() already presents one
+logical newline for a text file.  The console/Tera Term output path used by
+puts("\n") already displays that CR as the expected terminal newline.
+
+The original fsout() did this:
+
+    putchar(c);
+    if(c == '\n')
+        putchar(10);
+
+That explicit LF (10) was therefore a second vertical movement on the tested
+Tera Term setup, producing the blank line.
+
+Correction
+----------
+fsout() now emits exactly the logical character supplied by IOLIB:
+
+    fsout(c)
+    int c;
+    {
+        putchar(c);
+    }
+
+This changes display only.  It does not alter fsgetc(), the word/line pass, the
+character-statistics pass, file ownership, or overlay mapping.
+
+Hardware regression test
+------------------------
+Build and run:
+
+    FILESTAT TEST.C /V
+
+Each source line should now occupy exactly one terminal line.
+
+Also check the original listing path:
+
+    FILESTAT TEST.C /L
+
+Its file listing uses the same resident fsout() service, so it should also no
+longer double-space the file contents.  The final statistics should remain
+unchanged.

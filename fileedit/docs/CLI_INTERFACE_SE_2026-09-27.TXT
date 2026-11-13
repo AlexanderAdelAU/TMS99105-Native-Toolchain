@@ -1,0 +1,38 @@
+FILEEDIT99 CLI INTERFACE CHANGE -- 27 September 2026
+
+Base:
+  SBC_FileEdit99_bank0_insert_leaf_HARDWARE_VALIDATED_2026-09-27
+  hardware-validated SHA-256: 66e4a448224dfc608da57da0f821048c75dea846797cb24df77dcb793897c011
+
+New public command line:
+  FILEEDIT
+      Displays usage.
+
+  FILEEDIT <filename> /S
+      Displays FILESTAT analysis/statistics.
+
+  FILEEDIT <filename> /E
+      Opens the file in the editor.
+
+A filename without /S or /E displays usage.  Unsupported or extra arguments
+also display usage.  The old public /L, /V, filename-less /E, and /I command
+paths were removed from the command-line driver.  Viewer and statistics
+functions used internally by the editor remain unchanged.
+
+Build verification:
+  Clean rebuild completed with verified Linux Small-C/R99/DREL/LINK99 tools.
+  Overlay-chain lint passed.
+  Resident-chain lint passed.
+  Every R99 object except FILESTAT.R99 is byte-for-byte identical to the
+  hardware-validated baseline.  In particular EBMAP.R99, EDITBUF.R99,
+  EDITCTL.R99, EDITMENU.R99, OVL_VIEW.R99 and OVL_EDIT.R99 are unchanged.
+
+Candidate executable:
+  FILEEDIT.EXE size: 35684 bytes
+  SHA-256: 4dd4c0a6e313a6459821a78de34680e9c8a219e098c242528f34c418dfb3971c
+
+Hardware validation requested:
+  1. FILEEDIT                 -> usage
+  2. FILEEDIT TEST.C          -> usage
+  3. FILEEDIT TEST.C /S       -> statistics/report
+  4. FILEEDIT TEST.C /E       -> normal editor

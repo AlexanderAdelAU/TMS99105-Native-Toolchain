@@ -1,0 +1,33 @@
+FILEEDIT interactive insertion latency fix -- gap buffer
+======================================================
+
+Symptom
+-------
+After the current-line redraw optimisation, ordinary character entry still had
+a long pause before the changed line appeared.
+
+Cause
+-----
+EDITBUF.ebins() physically shifted every byte from the insertion point to EOF
+on every character.  ebdel() likewise shifted the entire suffix left.  On a
+large file this dominates the key-to-screen latency even when only one terminal
+row is repainted.
+
+Fix
+---
+The editor arena is now represented physically as:
+
+    [prefix][free gap][suffix]
+
+while ebget()/ebput() continue to expose the same contiguous logical byte index
+to all existing renderer, save/verify and line-scanning code.
+
+The file-counting pass lets load place the initial gap at BOF, matching the
+editor's initial line-1/column-0 cursor.  The first edit is therefore immediate.
+Repeated insertion at the cursor consumes one byte from the gap and does not
+move the remainder of the file.  Deletion grows the gap.  If editing jumps
+elsewhere, ebagpmv() moves the gap to that logical position once; typing there
+is then O(1) per character again.
+
+The on-disk format and the editor's CR internal line delimiter are unchanged.
+The previous EBPUT ABI, IOLIB newline and current-line redraw fixes are retained.

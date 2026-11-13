@@ -1,0 +1,57 @@
+FILEEDIT99 bank-0 insertion leaf candidate — 27 Sep 2026
+========================================================
+
+Purpose
+-------
+Address the original beginning-of-file insertion latency with one deliberately
+small change after rejecting the earlier mapped-shift candidates.
+
+Rejected predecessor
+--------------------
+The compact mapped-shift candidate opened files again but crashed immediately
+on first inserted character on real SBC hardware.  It is not part of this
+candidate.
+
+What changed
+------------
+* EBMAP.A99 is restored to the known-good mapping/accessor implementation.
+* One new leaf routine, ebmup0(pos,end), copies a backwards run only inside
+  physical bank 0 (>9000-BFFF page 0).
+* ebmup0 performs no mapping, no BL/CALL, and no stack adjustment.
+* EDITBUF.C keeps all bytes above the first 12 KB on the original ebget/ebput
+  path, including the bank boundary byte.
+* Delete is completely unchanged from the known-good baseline.
+* Unused legacy ehfree/ehlimit/ehclaim entries were removed to preserve the
+  IOLIB heap margin; no active FILEEDIT source references them.
+
+Expected performance effect
+---------------------------
+For an insertion near BOF, up to the first 12288 bytes of the shifted suffix
+are moved by one tight MOVB loop instead of per-byte ebget()+ebput() calls.
+Bytes above 12288 remain on the old path in this first hardware candidate.
+This is intentionally a partial optimization so hardware can validate the
+basic bulk-copy mechanism before it is extended.
+
+Build verification
+------------------
+* Small-C compile: pass, Errors: 0.
+* R99 assembly: pass.
+* DREL resident chain lint: pass.
+* LINK99: pass.
+* 36 unchanged R99 objects are byte-for-byte identical to known-good.
+* Only EBMAP.R99 and EDITBUF.R99 differ.
+* 491 host-side insertion model cases match original shift semantics.
+* FILEEDIT.EXE size: 36708 bytes (same as known-good container size).
+* Resident runtime end before overlay pages: >7B8E.
+* Free space to >8000: 1138 bytes; IORESERVE is 1096 bytes.
+
+Hardware test order
+-------------------
+1. FILEEDIT TEST.C /E — confirm open succeeds.
+2. Insert one printable character near the beginning — confirm no crash.
+3. Insert several characters near beginning of LARGE30.TXT and assess delay.
+4. Compare with EOF typing.
+5. Test Backspace/Delete (expected baseline behaviour; delete was untouched).
+6. Save, exit, reopen and verify content.
+
+Do not promote this candidate to known-good until hardware validation passes.

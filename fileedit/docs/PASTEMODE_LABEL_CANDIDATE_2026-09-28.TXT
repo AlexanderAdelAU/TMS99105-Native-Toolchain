@@ -1,0 +1,64 @@
+FILEEDIT99 PASTEMODE LABEL CANDIDATE -- 2026-09-28
+=================================================
+
+STATUS
+------
+Wording-only candidate based on the hardware-tested Ctrl-V Paste Fix build.
+No paste, editor-buffer, find, file-I/O or input-queue logic was changed.
+
+USER INTERFACE CHANGE
+---------------------
+The footer no longer says '^V Paste', because Ctrl-V cannot directly access
+the Windows clipboard.  Ctrl-V arms FILEEDIT to receive terminal paste data.
+
+Footer:
+  Home End PgUp/Dn ^F Find ^V PasteMode ^O Save ^X Menu
+
+The footer is 53 characters long, exactly the same width as the corrected
+hardware-tested footer, so it remains within the safe terminal width.
+
+Paste-mode prompt:
+  PASTE MODE - use Tera Term Edit>Paste, Esc finish
+
+OPERATION
+---------
+1. Press Ctrl-V in FILEEDIT to enter Paste Mode.
+2. In Tera Term choose Edit -> Paste and confirm/send the clipboard text.
+3. When transmission is complete, press Esc.
+4. FILEEDIT performs one full redraw and leaves the cursor after the pasted
+   text.
+
+VERIFICATION
+------------
+Two independent clean Linux-host rebuilds are byte-for-byte identical.
+Compared with the hardware-tested Paste Fix build, only these R99 objects
+changed:
+  OVL_VIEW.R99   (footer wording only)
+  OVL_PASTE.R99  (prompt wording only)
+
+37 other comparable R99 objects are byte-for-byte identical, including:
+  EBMAP.R99
+  EDITBUF.R99
+  EDITCTL.R99
+  OVL_EDIT.R99
+  CONRX.R99
+  OVLAPI.R99
+  OVLMGR.R99
+
+DREL overlay-chain lint: PASS
+DREL resident-chain lint: PASS
+LINK99: PASS
+
+Overlay sizes:
+  OVL_VIEW   >0FA6   (26 bytes under >0FC0 limit)
+  OVL_EDIT   >0F9C   (36 bytes under >0FC0 limit)
+  OVL_PASTE  >0426   (2970 bytes under >0FC0 limit)
+
+FILEEDIT.EXE
+  size: 38974 bytes
+  SHA-256: bb318ed7bde47885cf04444139e3c3ae1f286c9ac824f2f69e8c1767af934d1f
+
+HARDWARE TEST
+-------------
+Confirm the footer/status remains stable, enter Ctrl-V PasteMode, send text
+with Tera Term Edit -> Paste, press Esc, then verify pasted text and status.

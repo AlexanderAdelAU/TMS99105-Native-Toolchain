@@ -1,0 +1,31 @@
+STEP 6.3 - FIFTH OVERLAY / RESIDENT HEADROOM
+
+Observed on hardware after Step 6.1/6.2:
+  - FILESTAT TEST.C could no longer open an existing file.
+  - interactive Open failed too.
+  - a second attempt could hang.
+The regression began with the large Step 6.1 resident EDITCTL, before the Step
+6.2 fsset case-folding change.  Step 6.3 therefore treats resident pressure as
+the primary fault and restores the proven low-level fsset implementation.
+
+Architecture:
+  resident EDITCTL  : persistent state + small orchestration loop
+  OVL_VIEW page 5   : one screen frame, then return
+  OVL_EDIT page 6   : one key decode/edit operation, then return
+
+OVL_EDIT never maps OVL_VIEW.  Instead resident EDITCTL alternates them.  All
+state that must survive the swap (etop, eline, ecol, ewant, etotal, eleft,
+edflag and the text buffer) remains resident/data memory.
+
+This both recovers resident code space and gives the key parser/edit machinery
+its own overlay budget.  Step 6.1 fast cursor movement, robust CSI consumption,
+literal TAB insertion and [MOD] remain available.
+
+
+STEP 6.3.1 CORRECTION
+---------------------
+The first Step 6.3 native build exposed two related issues: OVL_EDIT was 174 bytes
+over the >0FC0 chain-safe limit, and OVL_VIEW referenced edvcol() while edvcol()
+was itself placed in OVL_EDIT.  Because only one >8000 overlay may be mapped at a
+time, that dependency was invalid.  edxcol()/edvcol() are now resident shared
+helpers.  This removes the cross-overlay call and reduces OVL_EDIT size.

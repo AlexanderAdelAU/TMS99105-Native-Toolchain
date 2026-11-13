@@ -1,0 +1,29 @@
+SBC_R99 IOSEEK CALL/RETURN HOTFIX
+================================
+
+Symptom
+-------
+R99 reaches pass 2 and reports:
+
+    Can't rewind source.
+
+Cause
+-----
+The compact ASMVER implementation of IOSEEK.C called the internal helpers
+UNITIDX and RDBACK with Small-C/Plus CALL, but those helpers returned with RT.
+CALL is the compiler's stack-return convention and must be paired with RET.
+RT is the R11/register-link return used for BL-style leaf calls.
+
+Fix
+---
+The three helper exits now use RET:
+
+    UNITIDX:          RT -> RET
+    RDBACK success:   RT -> RET
+    RDBACK zero-fill: RT -> RET
+
+No C-level IOLIB semantics changed. lseek() still returns the new byte offset
+or -1. R99 source rewind remains lseek(sorbuf.fd, 0, SEEK_SET).
+
+The build preflight now rejects a standalone RT in IOSEEK.C so this calling
+convention mismatch cannot silently reappear.

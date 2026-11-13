@@ -1,0 +1,17 @@
+FILESTAT TEXT EDITOR -- STEP 6.2: INTERACTIVE FILENAMES
+======================================================
+
+The SBC BDOS directory search compares the 11 FCB filename bytes directly.
+Interactive filename entry therefore now canonicalizes alphabetic characters to
+uppercase.  FILEDATA fsset() performs the same canonicalization for names that
+arrive from argv or internal document transitions.
+
+This means Open/New/Save As accept natural lower-case typing while the file system
+receives the canonical uppercase form used by the disk directory.
+
+Open failure handling is also explicit.  Instead of a generic press-any-key pause,
+a missing filename presents Retry or Cancel.  This prevents a key intended for the
+next menu action from being consumed merely to dismiss an error screen.
+
+No overlay assignments changed in Step 6.2.  The Step 6.1 cursor-output reduction,
+CSI parser, [MOD] marker and literal ASCII TAB editing remain in place.

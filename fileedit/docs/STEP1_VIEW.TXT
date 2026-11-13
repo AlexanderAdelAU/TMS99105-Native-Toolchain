@@ -1,0 +1,137 @@
+FILESTAT -> TEXT EDITOR
+Step 1: read-only overlay viewer
+================================
+
+Goal
+----
+Prove the first editor-shaped feature without disturbing the original FILESTAT
+architecture:
+
+    open file -> display in Tera Term -> close file -> exit
+
+The test command is:
+
+    FILESTAT SAMPLE.TXT /V
+
+No keyboard handling and no editable buffer are introduced yet.  This keeps the
+hardware test small: if the viewer works, we have independently proved the new
+overlay, page assignment, resident terminal service and serial-terminal output.
+
+What changed
+------------
+1. OVL_VIEW.C was added as a fourth mutually-exclusive code overlay.
+2. OVL_VIEW is overlay ID 4 and physical page 5.
+3. OVLAPI.A99 now exports runview().
+4. TERMIO.C was added to resident code for ANSI/VT100 services.
+5. FILESTAT.C accepts /V and uses an open -> runview -> close path.
+6. The original analyser and /L paths are unchanged.
+
+Why this split matters
+----------------------
+The viewer is an operation, so its code is disposable and belongs in an
+overlay.  File ownership and terminal services apply across operations, so they
+remain resident.
+
+    RESIDENT                         OVERLAY WINDOW >8000-8FFF
+    --------                         -------------------------
+    FILESTAT                         OVL_WORD  page 2
+    FILEIO                           OVL_CHAR  page 3
+    FILEDATA                         OVL_RPT   page 4
+    TERMIO                           OVL_VIEW  page 5
+    OVLMGR
+    OVLAPI
+
+runview() is intentionally resident glue:
+
+    runview:
+            LI      R1,OVL_VIEW
+            CALL    @OVLMGR
+            CALL    @O_VIEW
+            RET
+
+DREL obtains O_VIEW from the OVL_VIEW.R99 entry point:
+
+    OVL_VIEW.R99=5,4,viewfile:O_VIEW
+
+Tera Term interface
+-------------------
+TERMIO emits ANSI escape sequences one ESC byte at a time, followed by an
+ordinary string.  This avoids relying on whether the Small-C compiler supports
+an octal/hex escape spelling inside string literals.
+
+    trmclear()   ESC[2J then ESC[H
+    trmrev()     ESC[7m
+    trmnorm()    ESC[0m
+
+The viewer uses those services for a reverse-video heading and EOF marker.  File
+contents still use fsgetc() and fsout(), preserving the SBC-specific CR/LF
+handling already proven by FILESTAT.
+
+What this milestone deliberately does not do
+--------------------------------------------
+- no menu
+- no keyboard input
+- no arrow keys
+- no paging or scrolling
+- no cursor-position tracking
+- no editable buffer
+- no save operation
+
+Those features should not be added until this step is tested on the real SBC.
+
+Expected hardware test
+----------------------
+1. Build the modified project.
+2. Download FILESTAT.EXE to the SBC in the usual way.
+3. Ensure Tera Term has ANSI/VT100 terminal handling enabled (its normal
+   terminal emulation is sufficient).
+4. Run:
+
+       FILESTAT SAMPLE.TXT /V
+
+5. Expected result:
+   - display clears;
+   - cursor returns to the top-left;
+   - a reverse-video "FILESTAT VIEWER - SAMPLE.TXT" heading appears;
+   - SAMPLE.TXT streams to the terminal;
+   - a reverse-video "End of file" marker appears;
+   - the file is closed and FILESTAT exits normally.
+6. Regression-test the original paths:
+
+       FILESTAT SAMPLE.TXT
+       FILESTAT SAMPLE.TXT /L
+
+   Their statistics should still match tests/EXPECTED.TXT.
+
+If /V does not build
+--------------------
+The first useful evidence is the complete SMALLC99/R99/DREL/LINK99 output.  In
+particular, check:
+
+- external-name length complaints;
+- an unresolved TERMIO symbol;
+- missing O_VIEW in generated OVLADDR.INC;
+- OVL_VIEW exceeding the one-page >0FC0 chain-safe budget;
+- physical-page assignment errors.
+
+If /V builds but the screen formatting is wrong
+------------------------------------------------
+The file streaming path and ANSI path can be separated quickly:
+
+- visible file text but raw "[2J" / "[7m" text suggests ESC is not reaching the
+  terminal as expected;
+- a correctly cleared/reversed display but broken line endings points back to
+  the fsout() path;
+- no file text but a visible viewer heading suggests the overlay and TERMIO are
+  working and fsgetc()/file position should be investigated.
+
+Next step after success
+-----------------------
+Add a resident raw-console input function.  With one-byte key input working, a
+resident menu can select:
+
+    1  Open/View file
+    2  File statistics
+    Q  Quit
+
+The statistics item will simply invoke the already-proven FILESTAT passes.

@@ -1,0 +1,47 @@
+SBC LINK99 - OVERLAY OWNERSHIP CONTRACT
+=======================================
+
+WHY THIS EXISTS
+---------------
+LINK99 uses OVLMGR to map the >8000-BFFF window. OVLMGR records the logical
+window owner in CUR_WINA_ID when virtual segment 8 is mapped. This is a hard
+architectural invariant, not a naming convention.
+
+RULES
+-----
+1. OVLMGR_INIT must be called before any overlay or data-bank mapping.
+   It explicitly clears CURRENT_PAGE[], CURRENT_ID[] and CUR_WINA_ID. No
+   overlay owner may survive from an earlier program invocation.
+
+2. Every callable/executable overlay must include virtual segment 8 in its
+   mapping, and its first table pair must be the segment-8 pair. Mapping the
+   executable overlay therefore establishes CUR_WINA_ID deterministically.
+
+3. An overlay that does not own segment 8 is DATA ONLY. It may be used as a
+   mapped workspace or storage bank, but it must never be entered with CALL,
+   BL, B, or any other executable transfer.
+
+4. Current LINK99 classifications are:
+
+      ID 1       OVL_USAGE        Executable   segment 8, page 2
+      IDs 2-11   OVL_CODE0..9     Data         segment 8, pages 3-12
+      ID 12      SYMBOLS          Data         segments 9-11, pages 13-15
+
+   OVL_CODE0..9 have assembler anchor symbols only so DREL can build/page the
+   banks. Those anchors do not make the banks callable code overlays.
+
+5. When adding a new overlay, declare its Kind in make_SBC_link99.ps1. The
+   build parses OVLTABLE.INC one row at a time and fails if an Executable
+   overlay does not begin with segment 8. Non-segment-8 exceptions must remain
+   explicitly data-only.
+
+6. Do not bypass ovlinit/OVLMGR_INIT. Startup ownership is explicit by design.
+
+REVIEW QUESTION
+---------------
+Before accepting any new mapped module ask:
+
+    "Can execution enter this mapping? If yes, does it own segment 8, and has
+     overlay state been explicitly initialized before the first mapping?"
+
+If the answer is not unambiguously yes, the overlay design is invalid.

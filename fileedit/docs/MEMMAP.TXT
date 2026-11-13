@@ -1,0 +1,53 @@
+FILEEDIT -- memory map (Step 9 adaptive editor buffer)
+======================================================
+
+>0000  +--------------------------------------------------+
+       | COMMON: shell/application bridge variables/gates |
+       | FREEMEM >00A6, MEMLIMIT >00B0                    |
+       | launch/return/BDOS gates remain always visible   |
+>0FFF  +--------------------------------------------------+
+
+>1000  +--------------------------------------------------+
+       | Resident program                                 |
+       | FILESTAT / EDITMENU / EDITBUF / FILEIO / etc.    |
+       |                                                  |
+       | [runtime free heap, if any]                      |
+       | ehclaim() reserves FREEMEM..MEMLIMIT             |
+>7FFF  +--------------------------------------------------+
+
+>8000  +--------------------------------------------------+
+       | One mutually-exclusive 4 KB code overlay         |
+       | page 2 WORD, 3 CHAR, 4 RPT, 5 VIEW, 6 EDIT       |
+>8FFF  +--------------------------------------------------+
+
+>9000  +--------------------------------------------------+
+       | 12 KB editor-data window                         |
+       | physical page 0: logical bytes 0..12287          |
+       | physical page 1: logical bytes 12288..24575      |
+>BFFF  +--------------------------------------------------+
+
+>C000  +--------------------------------------------------+
+       | Shell window                                     |
+       | page 0: SHELL (normal view)                      |
+       | page 1: final 8 KB of FileEdit document storage  |
+>DFFF  +--------------------------------------------------+
+
+>E000  +--------------------------------------------------+
+       | BDOS - never remapped by FileEdit                |
+>EFFF  +--------------------------------------------------+
+
+>F000  +--------------------------------------------------+
+       | ROM/MONITOR - fixed                              |
+>FFFF  +--------------------------------------------------+
+
+Adaptive capacity
+-----------------
+max text = 32767 + bytes successfully claimed from FREEMEM..MEMLIMIT.
+The byte-index variables are unsigned 16-bit.  One byte is always kept for the
+trailing sentinel.
+
+Shell safety
+------------
+The C/D page-1 technique matches SHELL V6.3's proven raw-COM loader.  COMMON
+return gate >02F0 disables page selection before RETURN, and RETURN restores
+C/D page 0 and calls MAP_INIT.  FileEdit ebhome() restores C/D page 0 too.

@@ -1,0 +1,76 @@
+FILEEDIT99 Ctrl-F Find candidate — 27 September 2026
+====================================================
+
+Base
+----
+SBC_FileEdit99_CLI_SE_HARDWARE_VALIDATED_2026-09-27
+
+Function
+--------
+Ctrl-F while editing opens a Find prompt on row 24.
+
+  * Search is case-sensitive.
+  * Maximum pattern length is 32 printable characters.
+  * Backspace/Delete edits the pattern.
+  * Ctrl-U clears the pattern.
+  * Esc cancels without moving the cursor.
+  * Enter searches forward from the current cursor position, inclusive.
+  * Search does not wrap at EOF.
+  * A match moves the cursor to the first matching character and adjusts the
+    vertical and horizontal viewport so the match is visible.
+  * Not found displays "Not found - press any key", rings the bell, and leaves
+    the document/cursor unchanged.
+  * No search string is retained between Ctrl-F operations in this first version.
+
+Architecture
+------------
+OVL_EDIT only recognises Ctrl-F and returns edflag=4.  Resident EDITCTL maps
+OVL_VIEW for one operation.  OVL_VIEW owns the one-shot prompt/search and then
+returns to EDITCTL, which performs a normal full redraw before accepting the
+next edit key.
+
+This keeps all persistent editor-buffer state unchanged and avoids expanding
+OVL_EDIT beyond its single-page budget.
+
+Build verification
+------------------
+Clean Linux rebuild using the verified Small-C/R99/DREL/LINK99 host toolchain:
+  Small-C compile: pass, Errors: 0
+  R99 assembly: pass
+  DREL overlay chain lint: pass
+  DREL resident chain lint: pass
+  LINK99: pass
+
+Overlay sizes:
+  OVL_VIEW = >0EDA (limit >0FC0, 230 bytes free)
+  OVL_EDIT = >0F60 (limit >0FC0, 96 bytes free)
+
+Validated performance/storage objects remain byte-for-byte unchanged:
+  EBMAP.R99   IDENTICAL
+  EDITBUF.R99 IDENTICAL
+
+Other unchanged application objects are also identical.  Intended differences:
+  EDITCTL.R99
+  OVL_VIEW.R99
+  OVL_EDIT.R99
+  OVLAPI.R99 (regenerated O_EDIT entry address)
+
+FILEEDIT.EXE:
+  size    37280 bytes
+  SHA256  7df75043398da3f6e75b5b1c4fe1016196b50061994805eec063034aac15fc3b
+
+Suggested SBC hardware validation
+---------------------------------
+1. FILEEDIT TEST.C /E.
+2. Ctrl-F, enter a known case-sensitive string, Enter; verify cursor lands on
+   the first occurrence at/after the current cursor.
+3. Move beyond that occurrence and repeat; verify only later matches are found.
+4. Ctrl-F then Esc; verify document and cursor remain unchanged.
+5. Search for a string not present; verify Not found and return to editor.
+6. Search near the beginning of LARGE30.TXT for a later string; verify normal
+   response and viewport positioning.
+7. Insert characters after using Find; verify the hardware-validated no-delay
+   insertion behavior remains intact.
+8. Save, exit and reopen to confirm Find has not modified file content.
+
+Do not promote this candidate until these hardware checks pass.

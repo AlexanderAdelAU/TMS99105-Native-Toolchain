@@ -1,0 +1,121 @@
+FILEEDIT STEP 9 -- ADAPTIVE HEAP + SHELL-WINDOW BUFFER
+=====================================================
+
+Purpose
+-------
+Step 8 provided 24575 editable bytes by banking physical pages 0 and 1 behind
+logical >9000-BFFF.  Step 9 adds two more sources of storage without moving the
+code overlay at >8000 or touching BDOS/ROM at >E000-FFFF:
+
+  1. the ordinary free EXE heap published by SHELL V6.3
+  2. the shell's own 8 KB >C000-DFFF window, mapped to physical page 1
+
+The capacity is determined at run time.  The formula is:
+
+    max text = 24576 + detected heap bytes + 8192 - 1 sentinel
+             = 32767 + detected heap bytes
+
+If no ordinary heap is free, FileEdit still gets 32767 editable bytes.
+
+Why the shell window is safe
+----------------------------
+SHELL V6.3 already uses this exact C/D mapping for raw COM execution:
+
+  APAGE = 1
+  SEGC  = 12
+  SEGD  = 13
+
+LDRRUN_F programs the C and D map registers to physical page 1, then launches
+through the COMMON gate at >02E8.  That gate enables paging and branches to the
+application.
+
+The application return vector points to the COMMON gate at >02F0.  That gate
+executes PSEL_DIS before branching into SHELL RETURN.  RETURN then explicitly
+writes page 0 back to the C and D map registers and calls MAP_INIT.  The BDOS
+gate at COMMON >02F6 likewise disables paging around CALL @BDOS and re-enables
+it on return.
+
+FileEdit follows the same contract.  EBMAP.A99 esbank() controls only segments
+C and D.  ebhome() restores C/D to page 0 before normal editor/viewer exits as
+an extra precaution; the shell return path remains the final safety net.
+
+Heap discovery and claim
+------------------------
+For paged EXE files, SHELL V6.3 SET_MEM_EXE computes:
+
+  FREEMEM  >00A6  end of page-0 resident program/data
+  MEMLIMIT >00B0  lowest virtual segment occupied by paged EXE content
+
+FileEdit reads those COMMON words once when EDITBUF is first needed.  If
+MEMLIMIT > FREEMEM, ehclaim() returns the old FREEMEM address and advances the
+published FREEMEM value to MEMLIMIT.  That reserves the whole current heap gap
+for the document and prevents a later allocator from handing out the same
+bytes.
+
+This project does not intentionally call malloc after EDITBUF is initialised.
+The analyser-only path does not claim the heap because ebsetup() is reached only
+by the editor/viewer buffer paths.
+
+Logical layout
+--------------
+The adaptive buffer is exposed by ebget()/ebput() as one byte stream:
+
+  0 .. 12287
+      >9000-BFFF physical page 0
+
+  12288 .. 24575
+      >9000-BFFF physical page 1
+
+  24576 .. 24575+ebheapsz
+      ordinary page-0 EXE heap returned by ehclaim()
+
+  remaining final 8192 bytes
+      >C000-DFFF physical page 1
+
+The final logical byte is reserved for the NUL sentinel.
+
+Physical-page ownership
+-----------------------
+The FileEdit build assigns code overlays to page 2 through page 6, all behind
+segment 8 (>8000-8FFF).  Page 1 is therefore free for editor data.  Page 1
+segments 9-B and page 1 segments C-D are distinct physical storage, so the
+existing 12 KB second bank and the reclaimed 8 KB shell bank do not overlap.
+
+Large-file indexing
+-------------------
+Document byte indexes (eblen, ebcap, vidx, file-save/verify indexes and editor
+insert/delete positions) are unsigned 16-bit values.  This removes the old
+signed 32767 byte ceiling while keeping the change small enough not to inflate
+the nearly-full OVL_EDIT overlay.
+
+The existing line-number and logical-column counters remain signed 16-bit.
+That is not a practical restriction for ordinary source/text files, but a
+pathological document containing more than 32767 logical lines, or one single
+line longer than 32767 characters, is outside this Step 9 design.
+
+Expected capacity
+-----------------
+The exact figure depends on the linked resident size.  A previous FILEEDIT EXE
+layout ended page-0 resident content near >7468 with the first paged segment at
+>8000, which corresponds to roughly 2.9 KB of ordinary heap.  Because Step 9
+changes the resident image, do not hard-code that value: the runtime check is
+authoritative.
+
+With a similar gap, the editor will be in the mid-35 KB range.  With zero heap,
+32767 bytes are still guaranteed by the two banked windows.
+
+Build/test
+----------
+Build on the normal Windows toolchain:
+
+    .\make_SBC_FileEdit99.ps1
+
+Suggested boundary tests:
+
+  tests\LARGE30.TXT   crosses the old 24 KB limit and enters the shell bank
+  open/edit/save/reopen around byte 24576
+  if runtime heap is nonzero, exercise a file larger than 32767 bytes
+  quit normally and verify the shell prompt repeatedly after each run
+  use Save/Save As so BDOS is exercised while C/D page 1 contains document data
+
+The source archive supplied for Step 9 does not contain a newly built EXE.

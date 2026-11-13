@@ -1,0 +1,49 @@
+NOTE: Historical Step 3.1 diagnosis.  Later inspection of BDOS59 and MONITOR V5.6 proved that MCONIN is blocking; see STEP3_3_CTL.TXT and STEP3_4_REDRAW.TXT.
+
+FILESTAT EDITOR STEP 3.1 - INPUT COMPATIBILITY FIX
+===================================================
+
+Observed on the real TMS99105 SBC
+---------------------------------
+The Step 3 viewer continually repainted immediately after V.  The ANSI title
+and first file lines appeared, proving that OVL_VIEW and cursor positioning
+were executing, but the program never waited for keyboard input.
+
+Cause
+-----
+Step 3 used:
+
+    c = _bdos(6,255);
+    while(c == 0) ...
+
+and assumed CP/M function 6 returned zero when no console byte was ready.
+The SBC's CBDOS/OS combination returned a non-zero idle value.  vkey() treated
+that value as an unrecognised key and the main viewer loop immediately redrew.
+
+Correction
+----------
+trmraw() now temporarily delegates to the function-1 call already proven by
+Step 2:
+
+    return _bdos(1,0);
+
+This is blocking input with echo.  The viewer redraws after each complete
+command, so the visible echo is transient.  More importantly, the screen now
+waits for a real key rather than spinning.
+
+The public terminal API remains trmraw(), so no overlay architecture changes
+are required when a true no-echo service is introduced later.
+
+Screen frame
+------------
+A resident trmrule(row) helper now draws 80-column horizontal rules at rows 2
+and 23.  The fixed layout is therefore:
+
+    row 1       title
+    row 2       rule
+    rows 3-22   twenty file lines
+    row 23      rule
+    row 24      status/help
+
+This keeps generic terminal drawing resident and conserves the 4 KB executable
+overlay window.

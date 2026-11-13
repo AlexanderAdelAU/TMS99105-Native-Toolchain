@@ -1,0 +1,134 @@
+FILESTAT editor evolution
+Step 2: resident keyboard input and interactive Tera Term menu
+================================================================
+
+Goal
+----
+Step 1 proved that a new editor-oriented overlay could be mapped at >8000 and
+could call resident file and terminal services.  Step 2 adds the first
+interactive application shell while leaving all existing FILESTAT behaviour
+available.
+
+Run it with:
+
+    FILESTAT SAMPLE.TXT /E
+
+The filename still comes from argv.  Interactive filename entry is deliberately
+postponed until the console-key path has been proven on the physical SBC.
+
+Expected menu
+-------------
+The exact width depends on the Tera Term window, but the screen should resemble:
+
+    FILESTAT TEXT EDITOR - STEP 2
+
+    Current file: SAMPLE.TXT
+
+      V  View file
+      S  File statistics
+      Q  Quit
+
+    V View   S Statistics   Q Quit
+    Command:
+
+The title/help rows are reverse video and are extended to the right edge with
+ANSI "erase to end of line" (ESC [ K).
+
+Commands
+--------
+V (or 1)
+    Opens the current file, maps OVL_VIEW, streams the file to Tera Term,
+    closes it, and waits for a key before returning to the menu.
+
+S (or 2)
+    Runs the original FILESTAT operation as a menu command:
+
+        fsreset
+        fsopen
+        OVL_WORD
+        close/reopen
+        OVL_CHAR
+        fsclose
+        OVL_RPT
+
+    The report remains visible until a key is pressed.
+
+Q
+    Clears the Tera Term screen and returns to the shell.
+
+Resident keyboard service
+-------------------------
+TERMIO.C now exports:
+
+    trmkey()
+
+It calls the CP/M-compatible resident BDOS wrapper already linked by FILESTAT:
+
+    _bdos(1, 0)
+
+BDOS function 1 is the blocking console-input-with-echo service.  Using it here
+is intentional: it is the smallest possible test of the SBC console input path.
+The command character may briefly echo after "Command:", but the next screen
+redraw removes it.
+
+This milestone does NOT yet claim raw/no-echo ANSI key handling.  Once this
+function is proven on the SBC, a later keyboard layer can use direct console
+input and decode multi-byte Tera Term sequences for arrows, PgUp/PgDn, Home,
+End, and Escape.
+
+Why the menu is resident
+------------------------
+EDITMENU.C owns application lifetime and dispatch.  It must survive every
+change of the >8000 overlay window, so it is resident alongside FILEIO,
+FILEDATA and TERMIO.
+
+    resident                       overlay window >8000
+    --------                       --------------------
+    FILESTAT                       OVL_WORD   page 2
+    EDITMENU                       OVL_CHAR   page 3
+    FILEIO                         OVL_RPT    page 4
+    FILEDATA                       OVL_VIEW   page 5
+    TERMIO
+    OVLMGR / OVLAPI
+
+No new overlay ID is required in Step 2.
+
+Important lifetime detail
+-------------------------
+The menu does not keep a file open between commands.  Each command opens and
+closes the file around its work.  This makes the milestone easy to reason about
+and prevents an EOF file position left by the viewer from affecting a later
+statistics command.
+
+Hardware test sequence
+----------------------
+1. Build normally.
+2. Regression-test the direct viewer:
+
+       FILESTAT SAMPLE.TXT /V
+
+3. Start the editor shell:
+
+       FILESTAT SAMPLE.TXT /E
+
+4. Press V.  Confirm the file displays single-spaced.
+5. Press any key at the end-of-file prompt.  Confirm the menu returns.
+6. Press S.  Confirm the familiar FILESTAT report appears.
+7. Press any key.  Confirm the menu returns again.
+8. Press Q.  Confirm control returns to the shell.
+9. Regression-test the old analyser paths:
+
+       FILESTAT SAMPLE.TXT
+       FILESTAT SAMPLE.TXT /L
+
+If the menu draws but a command key is never accepted, report that exact
+behaviour before changing anything else.  It would mean the BDOS console-input
+entry on this SBC differs from the expected CP/M-compatible function-1 path;
+the overlay architecture itself would still be proven and unchanged.
+
+Next milestone
+--------------
+After trmkey() is proven, replace the streaming viewer with the first
+screen-oriented viewer: reserve title/status rows, display one screenful of
+text, and decode Tera Term cursor/PgUp/PgDn keys.  That is the bridge from a
+viewer to a real editor.

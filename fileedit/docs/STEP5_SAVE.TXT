@@ -1,0 +1,93 @@
+FILESTAT TEXT EDITOR -- STEP 5: VERIFIED SAVE
+=============================================
+
+Purpose
+-------
+Step 4.1 proved that the >9000-BFFF persistent arena can be edited safely in
+RAM.  Step 5 adds the first disk-changing operation, but keeps it resident and
+separate from the executable overlay window.
+
+No new overlay is added.  OVL_VIEW remains the shared one-frame renderer at
+>8000-8FFF; EDITCTL, EDITBUF and FILEIO remain resident.
+
+Delete-key correction
+---------------------
+The Step 4.1 decoder treated both ASCII 8 and ASCII 127 as Backspace.  On the
+real Tera Term setup the physical Delete key is arriving as 127, so pressing
+Delete performed a delete-left operation.
+
+Step 5 now decodes:
+
+    8          Backspace / delete left
+    127        Delete character under the visible cursor
+    ESC [ 3 ~  Delete character under the visible cursor
+
+Thus with "aA" and the cursor visibly on A, Delete removes A.  Backspace
+continues to remove a character to the left.
+
+Save key
+--------
+Ctrl-O is the in-editor Save command.  Ctrl-S is deliberately avoided because
+it is XOFF and may be consumed by serial flow-control settings.
+
+Title states are:
+
+    [MEM]      freshly loaded, not changed
+    [MOD]      RAM differs from the last successful disk state
+    [SAVED]    the most recent Save completed and verified
+
+Safe-save sequence
+------------------
+FILEIO performs Save in four phases:
+
+    1. derive a rolling backup name on the same drive
+         TEST.C    -> TEST.BAK
+         A:TEST.C  -> A:TEST.BAK
+         TEST.BAK  -> TEST.BK1
+
+    2. copy the current on-disk file to that backup
+
+    3. write the complete >9000-BFFF RAM image to the original filename
+
+    4. close, reopen and compare the normalized text stream byte-for-byte
+       against the RAM buffer
+
+Only after phase 4 succeeds are ebdirty cleared and ebsaved set.
+
+If backup creation fails, the original is never opened for writing.
+If replacement or verification fails, the RAM image is retained and the
+backup filename is reported.  The rolling .BAK is intentionally kept after a
+successful save; each later save replaces it with the immediately previous
+disk version.
+
+The editor is a text editor.  IOLIB normalizes CR/LF while reading and writing,
+so verification compares the same logical CR-delimited representation stored
+in the editor arena rather than raw physical record padding.
+
+Dirty exit protection
+---------------------
+Ctrl-X exits immediately when the buffer is clean.  When it is dirty it asks:
+
+    S  Save and return to menu
+    D  Discard RAM changes and return
+    C  Cancel and continue editing
+
+A failed Save keeps the editor active and leaves the RAM image untouched.
+
+Architecture
+------------
+    >1000-7FFF   resident FILESTAT/FILEIO/EDITBUF/EDITCTL/TERMIO/etc.
+    >8000-8FFF   one code overlay; OVL_VIEW renders editor frames
+    >9000-BFFF   persistent editable text arena
+
+The save code is resident because it owns disk lifetime and must not disappear
+under an overlay swap.  No code overlay IDs or mapper assignments change.
+
+Hardware test
+-------------
+Use a copy of TEST.C for the first test.
+
+    FILESTAT TEST.C /E
+
+Choose E, verify Delete-at-cursor, edit text, press Ctrl-O and confirm [SAVED].
+Then exit and inspect both TEST.C and TEST.BAK with FILESTAT /L.
