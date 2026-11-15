@@ -87,6 +87,29 @@ The source of the Windows cross tools themselves is in
 
 ---
 
+## How FileEdit's OVL99 overlays work
+
+FileEdit now uses **seven physical code overlays** behind the shared
+`>8000–>8FFF` window. The application makes ordinary C calls (for example
+`viewfile()`); generated *resident thunks* select the correct overlay
+through `OVCALL`/`OVLMGR`, including return to a previously mapped
+overlay after nested calls.
+
+**No Windows LINK99 changes were required.** `OVLMAP.TXT`,
+`ovlgen.ps1` and DREL generate the page descriptors, entry addresses,
+tables and resident thunks; the existing Windows linker handles symbol
+resolution and physical-page placement. This has been tested on the
+TMS99105 SBC, including nested overlay calls and a roughly 33 KB
+FileEdit save-and-backup test.
+
+The current build still assigns **whole modules to pages manually**;
+automatic module/function placement is a proposed future toolchain
+phase, not a current feature. See the
+[step-by-step implementation explanation](fileedit/README.md#how-transparent-overlays-work-without-changing-link99)
+and [FileEdit overlay map](fileedit/OVLMAP.TXT).
+
+---
+
 ## Related
 
 - [TMS99105-SBC](https://github.com/AlexanderAdelAU/TMS99105-SBC): the hardware
