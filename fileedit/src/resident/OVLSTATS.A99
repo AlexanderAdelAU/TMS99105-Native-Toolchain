@@ -1,0 +1,34 @@
+; OVLSTATS.A99 -- resident OVL99 calling thunks for FILESTAT.
+; Phase 1 integration: three published statistics entry points.
+; The aliases O_WORD, O_CHAR, O_RPT are supplied by FileEdit's DREL
+; generator.  Each C caller uses the original function's public name.
+        DXOP    CALL,6
+        DXOP    RET,7
+
+R1      EQU     1
+R2      EQU     2
+
+        INCL    "OVLDEFS.INC"
+        INCL    "OVLADDR.INC"
+
+        EXT     OVCALL
+
+wordscan:
+        LI      R1,OVL_WORD
+        LI      R2,O_WORD
+        B       @OVCALL
+
+charscan:
+        LI      R1,OVL_CHAR
+        LI      R2,O_CHAR
+        B       @OVCALL
+
+report:
+        LI      R1,OVL_RPT
+        LI      R2,O_RPT
+        B       @OVCALL
+
+        ENT     wordscan
+        ENT     charscan
+        ENT     report
+        END
