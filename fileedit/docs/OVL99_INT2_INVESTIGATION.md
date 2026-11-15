@@ -170,3 +170,28 @@ recurs. Merge remains blocked until these tests pass.
 
 No shell, BDOS, backup, or overlay code fixes should be made merely in
 response to failures observed with the reportedly corrupted image.
+
+
+## Replacement image: TYPE and LOAD address clarified
+
+User confirmed that `TYPE SAMPLE.TXT` works correctly on the replacement
+disk image, displaying text well beyond the initial lines and returning
+to the shell prompt without exception. This is strong evidence the old
+disk image caused the prior read/interrupt symptoms, though FileEdit's
+write/backup regression still needs to be repeated on the new image.
+
+The user also noticed that original `SAMPLE.TXT` has `DIR2 LOAD >1000`,
+while FileEdit-created `.TXT` and `.BAK` on the old image displayed
+`LOAD >0000`. Source review shows this is expected: in `BDOS61.A99`,
+`FLA EQU 16` is directory metadata and `MAKFIL` zeros all user-FCB
+metadata beyond the filename before storing the new entry. IOLIB
+`fopen(name,"w")` invokes BDOS create-file and does not specify a
+load address. Thus `>0000` for newly created text files is normal;
+the shell `TYPE` command reads text records and does not launch them
+at FLA. An original text file made with a loader or shell SAVE may carry
+`>1000` instead. The LOAD metadata discrepancy is **not a demonstrated
+OVL99 fault**.
+
+Remaining gate: rerun clean-image `FILEEDIT /O`, Save As,
+subsequent save with automatic backup, then verify both new files with
+the shell and test larger document-bank boundaries. No merge yet.
