@@ -104,6 +104,151 @@ DREL also lints relocation chains and checks one-page overlay size limits.
 The build checks that published overlay functions resolve to resident
 thunks rather than directly to virtual overlay addresses.
 
+## How transparent overlays work (without changing LINK99)
+
+**The key distinction is that LINK99 already knew how to place R99 modules
+in physical pages.** What FileEdit lacked was a stable, resident entry
+point for each exported overlay function, together with a resident runtime
+that could select the page and return through nested overlay calls.
+
+We added that indirection *around* the existing Windows-hosted LINK99,
+not inside the compiler or linker. From ordinary Small-C code, a call
+such as `viewfile()` still looks like any other C function call.
+
+### 1. Describe code ownership once
+
+[`OVLMAP.TXT`](OVLMAP.TXT) declares a source module, its physical
+page, a logical overlay name and its externally callable functions:
+
+```text
+OVL_VIEW   5  VIEW    viewfile
+OVL_EDIT   6  EDIT    editstep
+OVL_NAMEIO 8  NAMEIO  nmprompt
+```
+
+All seven FileEdit code overlays are linked to the **same virtual
+segment 8**, `>8000–>8FFF`, but each has a **different physical page**.
+Thus `>8000` by itself does not identify a callable function: the
+runtime must know both the overlay identity and the function's entry
+offset/address within the window.
+
+### 2. Generate the build inputs in two phases
+
+[`make_SBC_FileEdit99.ps1`](make_SBC_FileEdit99.ps1) invokes
+[`tools/ovlgen.ps1`](tools/ovlgen.ps1) before and after DREL:
+
+1. **Definitions:** `ovlgen -Phase defs` reads the map and generates
+   `OVLDEFS.INC` (logical IDs) and `OVLDESC.TXT` (DREL module/page/
+   exported-entry descriptors).
+2. **Compile and inspect:** Small-C and R99 build the modules; DREL
+   checks their relocation chains and generates `OVLADDR.INC`
+   (exported overlay entry addresses) and `OVLTABLE.INC` (the
+   segment-to-physical-page table).
+3. **Resident thunks:** `ovlgen -Phase thunks` uses those generated
+   addresses and IDs to produce `OVLTHUNK.A99`. The build assembles
+   this alongside the resident `OVCALL.A99` and `OVLMGR.A99`.
+4. **Ordinary link:** The unchanged Windows LINK99 links the resident
+   objects and places each code module using its existing `-P`
+   physical-page arguments (for example `-P5 OVL_VIEW.R99`).
+
+Every public overlay function gets a small resident *thunk*. A
+representative generated entry is:
+
+```asm
+viewfile:
+    LI R1,OVL_VIEW
+    LI R2,O_VIEWFILE
+    B  @OVCALL
+```
+
+`O_VIEWFILE` comes from DREL; it identifies the real implementation
+inside the `>8000` window. The public symbol `viewfile` belongs to
+the **resident thunk**, which is always available. The final linker
+symbol listing from the successful SBC build resolved `viewfile` to
+resident address `>5462`, not into the overlay window.
+
+Notice the **`B`**, rather than a new `CALL`. The thunk preserves the
+return address and arguments established by the caller's ordinary C
+call; `OVCALL` takes responsibility for eventually returning there.
+
+### 3. Map, call and restore at runtime
+
+[`src/resident/OVCALL.A99`](src/resident/OVCALL.A99) receives the
+logical overlay ID in **R1** and the entry address in **R2**.
+
+- If the required overlay already owns the window, it branches directly
+  to the entry (fast path).
+- Otherwise, it saves the original return address and the previous
+  overlay owner on a **resident 16-frame stack**.
+- It calls [`OVLMGR.A99`](src/resident/OVLMGR.A99), which selects
+  the physical page through the existing CRU page registers and
+  records the current owner in `CUR_WINA_ID`.
+- It calls the real implementation using the normal Small-C ABI.
+  On return it restores the previous overlay for an overlay caller,
+  reinstates the original return address and returns normally. The
+  function result in R4 survives the mapper.
+
+The nested-call test proves why the return mechanism matters:
+
+```text
+Resident -> WORD (page 2) -> CHAR (page 3) -> RPT (page 4)
+Resident <- WORD (restored) <- CHAR (restored) <- RPT (returns)
+```
+
+More precisely, RPT returns to the restored CHAR page, CHAR returns
+to the restored WORD page, and WORD returns to resident code. The
+actual `FILEEDIT /O` test checks results **108 -> 109 -> 110** and
+prints `OVL99 NESTED PASS` on the TMS99105 SBC.
+
+### 4. Keep code mapping separate from editor data banking
+
+The generated-overlay validator rejects a code overlay that attempts
+to use a segment other than 8. That protects FileEdit's independent
+[`EBMAP.A99`](src/resident/EBMAP.A99) data mappings at
+`>9000–>BFFF` and the optional editor storage at `>C000–>DFFF`.
+`>E000–>FFFF` (BDOS/ROM) is not remapped by FileEdit.
+
+**An important restriction:** a pointer to a string, buffer or other
+data *inside an overlay* must not be passed to another overlay that
+replaces that same window while the pointer is in use. Persistent
+cross-overlay data must live in resident or independently mapped
+memory. Likewise, arbitrary cross-overlay branches that bypass thunks
+are unsafe.
+
+### 5. What LINK99 does—and what it does not yet do
+
+This is **transparent calling**, not automatic function placement.
+
+The existing linker resolves ordinary external symbols. Because the
+generated exported names are defined by **resident thunks**, normal
+C calls link to those thunks. The build verifies LINK99's reported
+external references are to resident addresses, runs DREL chain checks,
+and fails when a mapped code module exceeds the current one-page safe
+budget (**4,032 bytes of a 4,096-byte page**).
+
+There are still **manual module/page choices** in `OVLMAP.TXT`.
+The tools do not automatically split a large C function, move individual
+functions between modules, group frequently calling functions, or
+synthesize arbitrary cross-overlay relocations. In the tested build,
+`OVL_VIEW` and `OVL_EDIT` had only 26 and 36 safe bytes free,
+respectively. Additional features may require intentionally splitting
+modules or assigning new pages.
+
+**Proposed next phase (not implemented):** extend the build tooling to
+measure and allocate whole modules automatically, then investigate
+function-level placement in LINK99/compiler object metadata, balancing
+page capacity with call frequency. Keep this distinct from the
+already-working OVL99 call gate.
+
+**Evidence:** `FILEEDIT /O` passed on hardware, and FileEdit
+successfully navigated, saved, reopened and backed up 16 KB and about
+33 KB test documents across its data-bank boundaries. See
+[`docs/OVL99_PHASE2.md`](docs/OVL99_PHASE2.md) for the test
+procedure and
+[`docs/OVL99_INT2_INVESTIGATION.md`](docs/OVL99_INT2_INVESTIGATION.md)
+for the independently reproduced intermittent Shell `TYPE`/INT2
+issue, which this integration does not claim to fix.
+
 ## TMS9902 receive architecture
 
 Blocking console input worked until full-screen scrolling became
