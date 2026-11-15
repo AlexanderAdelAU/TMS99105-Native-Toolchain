@@ -42,3 +42,9 @@ report()
     putnum(longlen);
     puts(")\n");
 }
+
+ovprobec(n)
+int n;
+{
+    return n + 100;
+}
