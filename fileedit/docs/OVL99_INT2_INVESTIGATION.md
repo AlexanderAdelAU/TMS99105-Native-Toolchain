@@ -235,3 +235,44 @@ Earlier-image INT2 symptoms remain historical observations associated
 with the reportedly corrupted disk image; they have not recurred in
 the clean-image tests shown so far. Do not merge before the large-file
 regression is complete.
+
+
+## New INT2 after pagination Enter (15 November 2026)
+
+Following clean-image OVL99 Save/Save As and creation of OVLTEST.BAK,
+the user ran shell `TYPE OVLTEST.BAK`. The backup's first line was
+confirmed to be the unmodified `/*`, while OVLTEST.TXT began `A/*`.
+**However, after pressing Enter during TYPE, the machine interrupted:**
+
+```text
+INT2 PC:04D2 WP:04C4 ST:C084 SEG:0000 PAGE:0000
+MAP:0000 ... 0000
+<TMS9900 DISC MONITOR V5.5F>
+```
+
+The PC and WP are in the common-memory buffer range `>0300–>04FF`;
+they are anomalous for normal TYPE command execution (TYPE lives in
+the `>D000` command window with the shell workspace at `>0230`).
+The capture is interrupt vector 2, not definitive proof of an illegal
+instruction. We cannot yet establish whether a bad disk/FCB operation,
+interrupt corruption, stack/return-address corruption, or a TYPE
+pagination problem led to the saved context.
+
+**Crucial isolation:** shell `TYPE.A99` enters the `TYVOMIT` path on
+Enter at the 22-line pagination pause, setting TYPFLG to -1 and then
+restoring saved R7/R6. A fault at that moment is not uniquely explained
+by FileEdit backup; the TYPE read and pagination must be tested
+independently.
+
+**Read-only comparison after clean boot, without running FileEdit:**
+run `TYPE SAMPLE.TXT`, advance first pause with **Space** (single
+page); reboot and run `TYPE SAMPLE.TXT`, advance with **Enter**
+(remaining pages); stop at first unexpected interrupt. If both pass,
+repeat with `OVLTEST.TXT` before `OVLTEST.BAK`. Record whether failure
+occurs at a consistent page/sector boundary and whether it occurs
+only for the backup. Avoid all disk writes pending isolation. No code
+fix is justified by these observations alone.
+
+**Status correction:** OVL99 Save As and backup *creation* passed;
+backup full-file read and reliable post-save shell operation are NOT
+yet verified. No merge to main.
