@@ -192,7 +192,7 @@ The nested-call test proves why the return mechanism matters:
 
 ```text
 Resident -> WORD (page 2) -> CHAR (page 3) -> RPT (page 4)
-         <- restore WORD <- restore CHAR <- RPT result
+Resident <- WORD (restored) <- CHAR (restored) <- RPT (returns)
 ```
 
 More precisely, RPT returns to the restored CHAR page, CHAR returns
