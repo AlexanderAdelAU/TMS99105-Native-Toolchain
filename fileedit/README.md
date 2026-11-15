@@ -16,8 +16,8 @@ Current features include full-screen VT100/ANSI editing, a display-only
 line-number gutter, cursor navigation, insertion/deletion, real ASCII
 TABs, Open/New/Save/Save As, `[MOD]` dirty-state indication, rolling
 `.BAK` backups, post-save verification, the original FILESTAT
-statistics, five mapped code overlays, and interrupt-buffered TMS9902
-receive input using a 64-byte resident ring.
+statistics, seven generated OVL99 code overlays, and interrupt-buffered
+TMS9902 receive input using a 64-byte resident ring.
 
 `FILESTAT.EXE` is still produced as a byte-identical compatibility
 alias, but **FILEEDIT.EXE** is the primary application.
@@ -38,18 +38,15 @@ The editor runs directly in the VT100/ANSI terminal. The line-number gutter is r
 
 ## Typical use
 
-``` text
-FILEEDIT TEST.C /E
-FILEEDIT /E
+```text
+FILEEDIT TEST.C /E    Open the full-screen editor
+FILEEDIT TEST.C /S    Run file statistics
+FILEEDIT /O           Test nested cross-overlay calls
 ```
 
-The original analyser modes remain:
-
-``` text
-FILEEDIT TEST.C
-FILEEDIT TEST.C /L
-FILEEDIT TEST.C /V
-```
+`FILEEDIT /O` should report `OVL99 NESTED PASS` on the SBC. The current
+`FILESTAT.C` command-line parser exposes these three modes; older tutorial
+examples of `/L`, `/V` and `/I` are historical and are not current CLI modes.
 
 ## Editor keys
 
@@ -70,13 +67,18 @@ editable, saved, or included in FILESTAT statistics.
 
 ## Architecture
 
-``` text
->1000-7FFF   resident kernel, editor state, file I/O,
-             terminal services and TMS9902 RX queue
->8000-8FFF   one mapped code overlay at a time
->9000-BFFF   persistent editor text arena
->C000-FFFF   system / shell / BDOS / MONITOR
+```text
+>1000-7FFF   resident FileEdit, OVCALL/OVLMGR, editor state, I/O, RX
+>8000-8FFF   one OVL99-mapped code overlay at a time (segment 8)
+>9000-BFFF   12 KB editor data window, physical pages 0 and 1
+>C000-DFFF   shell page 0 / 8 KB editor data in page 1 while active
+>E000-EFFF   BDOS (untouched by FileEdit)
+>F000-FFFF   ROM / MONITOR
 ```
+
+The document also uses safely claimed resident heap space between
+banked regions. At runtime, editor capacity is `32767 + ebheapsz` bytes,
+with a byte reserved for the trailing sentinel.
 
 Overlay assignments:
 
@@ -86,11 +88,21 @@ page 3   OVL_CHAR   character-class pass
 page 4   OVL_RPT    report formatter
 page 5   OVL_VIEW   viewer/editor frame renderer
 page 6   OVL_EDIT   key decoding and editing operations
+page 7   OVL_PASTE  terminal paste/edit handling
+page 8   OVL_NAMEIO filename prompt
 ```
 
-DREL generates overlay address tables and lints relocation chains,
-catching overlay-size violations and illegal overlay-to-overlay
-dependencies before code reaches the SBC.
+`OVLMAP.TXT` is the source of truth for module IDs, physical pages and
+published entry names. `tools/ovlgen.ps1` and DREL produce the address
+includes, overlay table and resident calling thunks (`OVLTHUNK.A99`).
+Calls such as `viewfile()` and `editstep()` go through those thunks and
+`OVCALL` rather than manually mapping overlays. The manager maintains
+a 16-frame stack for nested overlay calls, and generated map validation
+prevents code overlays from overwriting the data banks.
+
+DREL also lints relocation chains and checks one-page overlay size limits.
+The build checks that published overlay functions resolve to resident
+thunks rather than directly to virtual overlay addresses.
 
 ## TMS9902 receive architecture
 
@@ -132,20 +144,10 @@ handler**. The previous owner remains responsible for timer or other
 INT4 work and performs the final `RTWP`. FileEdit therefore adds an RX
 service without claiming exclusive ownership of INT4.
 
-The `/I` diagnostic independently proves the INT4 hook using the
-known-working TMS9902 interval timer:
-
-``` text
-FILEEDIT /I
-```
-
-Expected:
-
-``` text
-FILEEDIT INT4 timer-hook test...
-Waiting for 8 TMS9902 timer interrupts.
-PASS - INT4 hook received 8 timer interrupts.
-```
+The original development notes include a standalone `/I` interrupt test.
+The current OVL99 `FILESTAT.C` command-line driver does not expose that
+historical diagnostic; use the editor's keyboard navigation to check
+normal RX behaviour.
 
 ## Save safety
 
@@ -162,11 +164,15 @@ The supplied Windows-hosted toolchain contains:
 -   `drel.exe`
 -   `link99.exe`
 
-From the project root run:
+From the `fileedit/` directory run on Windows:
 
-``` powershell
-.\make_SBC_filestat99.ps1
+```powershell
+powershell -ExecutionPolicy Bypass -File .\make_SBC_FileEdit99.ps1
 ```
+
+Set `$env:FILEEDIT_SKIP_MONITOR_DEPLOY = "1"` when building without the
+sibling monitor directory. `.github/workflows/ovl99-fileedit.yml` runs
+the same build in Windows GitHub Actions.
 
 The script stages inputs into `build\`, compiles resident modules and
 overlays, runs DREL chain lint, generates overlay tables, checks
@@ -186,7 +192,8 @@ The script also deploys to a sibling MONITOR workspace. Adjust
 ``` text
 src\resident\      resident C and assembly modules
 src\overlays\      mapped code overlays
-include\           overlay definitions
+OVLMAP.TXT         canonical overlay declarations
+tools\ovlgen.ps1    generated overlay descriptors and thunks
 lib\               runtime objects and libraries
 tools\             compiler/assembler/DREL/linker
 tests\             repeatable sample input
@@ -215,13 +222,33 @@ Particularly useful files are:
 -   `docs/MEMMAP.TXT` --- current memory and overlay map;
 -   `EDITSTEP*.TXT` --- short hardware bench-test cards.
 
-## Status and next step
+## OVL99 hardware verification (November 2026)
 
-Editing, file management, backup/verification, line numbers, TAB
-handling, rapid navigation and interrupt-buffered receive have been
-exercised on the target SBC.
+The TMS99105 SBC has reported `OVL99 NESTED PASS` for the test path
+`Resident → WORD → CHAR → RPT → CHAR → WORD → Resident`.
 
-The next planned editor feature is **Find / Find Next**.
+After transfer to a replacement disk image, a regular document was edited,
+saved, and automatically backed up. The modified main file and original
+backup content were verified by reopening. A 16 KB regression document
+crossing the 12 KB editor-bank boundary was navigated, edited on line 171,
+saved, and reopened. `L16TEST.TXT` retained `X0171`; `L16TEST.BAK`
+retained the original `0171`.
+
+The user also concatenated two 16 KB tests into an approximately 33 KB
+document. FileEdit navigated to EOF, then saved a copy as `L33TEST.TXT`,
+changed the beginning of line 430, saved again, and reopened both files:
+the main file retained `X0211` while `L33TEST.BAK` retained `0211`.
+That exercises the adaptive heap plus shell-window data bank while
+OVL99 controls the independent code-overlay window.
+
+The Windows cross-build has passed. An intermittent `TYPE` / INT2 fault
+has also been reproduced after SYSGEN **without FileEdit installed or
+running**. Its cause remains unresolved, and it is tracked separately in
+`docs/OVL99_INT2_INVESTIGATION.md`; it must not be reported as fixed by
+these overlay tests.
+
+For implementation and regression details, see `docs/OVL99_PHASE2.md`.
+The original tutorial documentation is retained for historical context.
 
 ## Historical note
 
