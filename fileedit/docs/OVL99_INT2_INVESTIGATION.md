@@ -392,3 +392,21 @@ this boundary, reloading to verify content, and a larger file that
 crosses the editor's 24 KiB/shell-window boundary.
 
 No merge to `main` until these regressions are evaluated.
+
+
+## End-of-file navigation passes on 16 KiB banked document
+
+The user scrolled to the end of `LARGE.TXT` in the OVL99 FileEdit
+editor and supplied a screenshot displaying lines 202–220 correctly,
+with the blank trailing line 221 and status `Ln 221/221 Col 1`.
+There was no observed display corruption, hang or INT2 in this test.
+
+This completes the **read-only navigation/rendering** regression for
+the 16 KiB / 221-line test file, including navigation beyond the first
+12 KiB editor bank and to EOF.
+
+Next safe test: use FileEdit's Save As to create a new filename before
+editing anything; modify a character around line 170 in the *copy*,
+save and verify the new file and its preceding-version `.BAK`.
+Preserve original `LARGE.TXT`. Afterward exercise the 30 KiB file
+that crosses the editor's shell-window data-bank boundary.
