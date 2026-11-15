@@ -19,6 +19,7 @@ extern fslist();
 extern wordscan();
 extern charscan();
 extern report();
+extern ovprobea();
 extern viewctl();
 extern editmenu();
 extern ebload();
@@ -31,6 +32,15 @@ extern int rxticks;
 
 extern char *fsname;
 extern int dolst;
+
+/* Dedicated nested-overlay gate test; no file or editor bank needed. */
+isovtest(p)
+char *p;
+{
+    if(p[0] != '/' && p[0] != '-') return 0;
+    if(p[1] != 'O' && p[1] != 'o') return 0;
+    return p[2] == 0;
+}
 
 isstat(p)
 char *p;
@@ -62,6 +72,7 @@ usage()
     puts("Usage:\n");
     puts("  FILEEDIT filename /S    Display file statistics\n");
     puts("  FILEEDIT filename /E    Edit file\n");
+    puts("  FILEEDIT /O             Test nested overlay calls\n");
 }
 
 main(argc, argv)
@@ -73,6 +84,14 @@ char **argv;
 
     ovlinit();
     fsset("");
+
+    if(argc == 2 && isovtest(argv[1])) {
+        if(ovprobea() == 110)
+            puts("OVL99 NESTED PASS\n");
+        else
+            puts("OVL99 NESTED FAIL\n");
+        return;
+    }
 
     if(argc != 3) {
         usage();
