@@ -203,6 +203,8 @@ foreach($a in @("O_WORD","O_CHAR","O_RPT","O_VIEW","O_EDIT","O_PASTE")) {
 # These resident assembly modules depend on the DREL-generated include files.
 Assemble "OVLMGR"
 Assemble "OVLAPI"
+Assemble "OVCALL"
+Assemble "OVLSTATS"
 
 Write-Output "`n--- overlay page budgets ---"
 foreach($o in $Overlays) {
@@ -229,7 +231,7 @@ foreach($o in $Overlays) {
 
 Write-Output "`n--- resident chain lint ---"
 $ResidentObjects = @(
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVLAPI.R99"
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVLAPI.R99","OVCALL.R99","OVLSTATS.R99"
 )
 $rLint = & .\drel.exe -c @ResidentObjects 2>&1 | Out-String
 Write-Output $rLint
@@ -245,7 +247,7 @@ foreach($o in $Overlays) {
 
 $LinkArgs = @(
     "-O1000","-M","-S","FILEEDIT.EXE",
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVLAPI.R99",
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVLAPI.R99","OVCALL.R99","OVLSTATS.R99",
     "CALL.R99","IOCORE.R99","IOOPEN.R99","IOREAD.R99","IOWRITE.R99","CBDOS.R99"
 )
 $LinkArgs += $PageArgs
