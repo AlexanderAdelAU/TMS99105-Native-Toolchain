@@ -3,7 +3,14 @@ name: OVL99 FileEdit Windows build
 on:
   push:
     branches:
+      - main
       - ovl99-fileedit-integration
+    paths:
+      - 'fileedit/**'
+      - '.github/workflows/ovl99-fileedit.yml'
+  pull_request:
+    branches:
+      - main
     paths:
       - 'fileedit/**'
       - '.github/workflows/ovl99-fileedit.yml'
