@@ -9,42 +9,22 @@
 ;*******************************************************************
 
 ;*******************************************************************
-;  MEMORY GEOMETRY
+;  FILEEDIT MEMORY GEOMETRY
 ;
-;    >1000-7FFF   resident / common (page 0)          28K
-;    >8000-BFFF   window A -- FOUR pages, segments 8..11
-;    >C000        shell / monitor
+;    >1000-7FFF  resident code / data (including OVLMGR and OVCALL)
+;    >8000-8FFF  code overlay window, segment 8 ONLY
+;    >9000-BFFF  editor data banking (EBMAP.A99, segments 9-B)
+;    >C000-DFFF  shell / optional editor data bank (EBMAP.A99)
+;    >E000-FFFF  BDOS / ROM - never remapped by FileEdit
 ;
-;  There is no window B any more. Codegen was never swappable: its
-;  page was mapped once at startup and stayed mapped for the life of
-;  the run, which is resident behaviour wearing an overlay's clothes.
-;  Making it genuinely resident released a whole segment to window A
-;  and retired OVL_TESTB and R_CODEON with it.
+;  The generic OVL_TABLE supports up to five (segment,page) pairs per
+;  overlay and its row stride is 20 bytes. In THIS application, however,
+;  the OVL99 generator rejects all code overlays except segment 8 to
+;  prevent accidental overwrites of the document banks.
 ;
-;  MAP_WIN_BASE (>80C0) is a CRU address and is unrelated to memory
-;  segment 8. It does not move.
-;*******************************************************************
-
-;*******************************************************************
-;  MULTI-PAGE OVERLAYS
-;
-;  The CCC3 expression engine measured 13656 bytes. A 4KB page cannot
-;  hold it; nor could the 8KB pair this file previously supported.
-;  Window A is therefore FOUR 4KB pages mapped SIMULTANEOUSLY, giving
-;  one contiguous 16K window >8000-BFFF. Every page of an overlay is
-;  addressable at once, so calls between them are ordinary direct
-;  calls -- no trampoline, no save-stack frame. The pages of ONE
-;  overlay are co-resident; DIFFERENT overlays remain mutually
-;  exclusive and a direct call between those is still never legal.
-;
-;  OVL_TABLE rows are now TEN words -- five (segment,page) pairs --
-;  so index = ID*20. A pair whose SEGMENT is zero ends the list, so
-;  a single-page overlay costs one iteration and behaves exactly as
-;  before. Pages are stored EXPLICITLY rather than assumed
-;  consecutive: an adjacency rule would be an unenforced invariant a
-;  later page reshuffle could break silently. DREL checks that the
-;  SEGMENTS are adjacent, because they form one virtual window, but
-;  the physical pages may be anything.
+;  CUR_WINA_ID tracks the logical overlay mapped in segment 8. OVCALL
+;  saves/restores this owner for nested cross-overlay calls; EBMAP manages
+;  its other independent segments without involving OVLMGR.
 ;*******************************************************************
 
 ;--- CONSTANTS ---
