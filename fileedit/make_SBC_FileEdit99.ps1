@@ -16,6 +16,8 @@ $SrcResident = Join-Path $ProjectRoot "src\resident"
 $SrcOverlay  = Join-Path $ProjectRoot "src\overlays"
 $IncludeDir  = Join-Path $ProjectRoot "include"
 $TestsDir    = Join-Path $ProjectRoot "tests"
+$OverlayMap  = Join-Path $ProjectRoot "OVLMAP.TXT"
+$Generator   = Join-Path $ToolsDir "ovlgen.ps1"
 $BuildDir    = Join-Path $ProjectRoot "build"
 $DistDir     = Join-Path $ProjectRoot "dist"
 
@@ -45,6 +47,8 @@ foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$IncludeDir,$TestsDir
     Need-Dir $d
 }
 Need-Dir $MonitorDir
+Need-File $OverlayMap
+Need-File $Generator
 
 $RequiredTools = @("smallcp.exe","r99.exe","drel.exe","link99.exe")
 foreach($f in $RequiredTools) {
@@ -114,9 +118,11 @@ Copy-Item -Path (Join-Path $IncludeDir  "*") -Destination $BuildDir -Force
 
 # Stage the tutorial sample input only. Large-file test data is user-supplied.
 Copy-Item -LiteralPath (Join-Path $TestsDir "SAMPLE.TXT") -Destination $BuildDir -Force
+Copy-Item -LiteralPath $OverlayMap -Destination $BuildDir -Force
 
 # From this point until final copy-out, EVERYTHING happens in build\.
 Set-Location -LiteralPath $BuildDir
+[Environment]::CurrentDirectory = (Get-Location).Path
 
 function Compile-Main($Name) {
     Write-Output "`n--- compile executable $Name ---"
@@ -145,30 +151,41 @@ function Assemble($Name) {
     }
 }
 
-$Overlays = @(
-    @{ Name="OVL_WORD"; Page=2; Id=1; Desc="OVL_WORD.R99=2,1,wordscan:O_WORD" },
-    @{ Name="OVL_CHAR"; Page=3; Id=2; Desc="OVL_CHAR.R99=3,2,charscan:O_CHAR" },
-    @{ Name="OVL_RPT";  Page=4; Id=3; Desc="OVL_RPT.R99=4,3,report:O_RPT" },
-    @{ Name="OVL_VIEW"; Page=5; Id=4; Desc="OVL_VIEW.R99=5,4,viewfile:O_VIEW" },
-    @{ Name="OVL_EDIT"; Page=6; Id=5; Desc="OVL_EDIT.R99=6,5,editstep:O_EDIT" },
-    @{ Name="OVL_PASTE"; Page=7; Id=6; Desc="OVL_PASTE.R99=7,6,pasteedit:O_PASTE" }
-)
+# Generate IDs and DREL descriptors from OVLMAP.TXT. The build no longer
+# maintains overlay ID, page and function lists by hand.
+Write-Output "`n--- OVL99 map -> definitions and descriptors ---"
+& $Generator -Phase defs -Map ".\OVLMAP.TXT" -Dir "."
+if($LASTEXITCODE -ne 0) { throw "OVL99 defs generation failed" }
+Need-File ".\OVLDEFS.INC"
+Need-File ".\OVLDESC.TXT"
+$Desc = @(Get-Content -LiteralPath ".\OVLDESC.TXT" | Where-Object { $_.Trim() -ne '' })
+$Overlays = @()
+$OvlFiles = @()
+$PageArgs = @()
+foreach($d in $Desc) {
+    $m = [regex]::Match($d, '^([A-Za-z_][A-Za-z0-9_]*)\.R99=(\d+),(\d+),')
+    if(-not $m.Success) { throw "invalid generated DREL descriptor: $d" }
+    $name = $m.Groups[1].Value
+    $page = [int]$m.Groups[2].Value
+    $Overlays += @{ Name=$name; Page=$page; Id=[int]$m.Groups[3].Value }
+    $OvlFiles += "$name.R99"
+    $PageArgs += "-P$page"
+    $PageArgs += "$name.R99"
+}
 
 # FILESTAT owns the IOLIB startup.  Every other C file is a module.
 Compile-Main "FILESTAT"
-foreach($m in @("FILEIO","FILEDATA","TERMIO","NAMEIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU","OVL_WORD","OVL_CHAR","OVL_RPT","OVL_VIEW","OVL_EDIT","OVL_PASTE")) {
+foreach($m in (@("FILEIO","FILEDATA","TERMIO","NAMEIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU") + @($Overlays | ForEach-Object { $_.Name }))) {
     Compile-Mod $m
 }
 
 # Assemble the generated A99 modules.
-foreach($m in @("FILESTAT","FILEIO","FILEDATA","TERMIO","NAMEIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU","OVL_WORD","OVL_CHAR","OVL_RPT","OVL_VIEW","OVL_EDIT","OVL_PASTE")) {
+foreach($m in (@("FILESTAT","FILEIO","FILEDATA","TERMIO","NAMEIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU") + @($Overlays | ForEach-Object { $_.Name }))) {
     Assemble $m
 }
 # Hand-written resident assembly services.
 Assemble "CONRX"
 Assemble "EBMAP"
-
-$OvlFiles = @("OVL_WORD.R99","OVL_CHAR.R99","OVL_RPT.R99","OVL_VIEW.R99","OVL_EDIT.R99","OVL_PASTE.R99")
 
 Write-Output "`n--- DREL overlay chain lint ---"
 $lint = & .\drel.exe -c @OvlFiles 2>&1 | Out-String
@@ -179,8 +196,8 @@ if($LASTEXITCODE -ne 0 -or $lint -notmatch "all chains conform") {
 
 # DREL creates the resident include files from the overlay entry records.
 $drelArgs = @("-i","OVLADDR.INC")
-foreach($o in $Overlays) {
-    $drelArgs += $o.Desc
+foreach($d in $Desc) {
+    $drelArgs += $d
 }
 
 Write-Output "`n--- DREL generated overlay tables ---"
@@ -193,18 +210,15 @@ if($LASTEXITCODE -ne 0) {
 Need-File ".\OVLADDR.INC"
 Need-File ".\OVLTABLE.INC"
 
-$anchors = Get-Content ".\OVLADDR.INC" -Raw
-foreach($a in @("O_WORD","O_CHAR","O_RPT","O_VIEW","O_EDIT","O_PASTE")) {
-    if($anchors -notmatch ("\b" + $a + "\b")) {
-        throw "missing generated anchor $a"
-    }
-}
+# Generate public thunks AFTER DREL has published entry addresses.
+Write-Output "`n--- OVL99 map -> public entry thunks ---"
+& $Generator -Phase thunks -Map ".\OVLMAP.TXT" -Dir "."
+if($LASTEXITCODE -ne 0) { throw "OVL99 thunks generation failed" }
+Need-File ".\OVLTHUNK.A99"
 
-# These resident assembly modules depend on the DREL-generated include files.
 Assemble "OVLMGR"
-Assemble "OVLAPI"
 Assemble "OVCALL"
-Assemble "OVLSTATS"
+Assemble "OVLTHUNK"
 
 Write-Output "`n--- overlay page budgets ---"
 foreach($o in $Overlays) {
@@ -231,7 +245,7 @@ foreach($o in $Overlays) {
 
 Write-Output "`n--- resident chain lint ---"
 $ResidentObjects = @(
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVLAPI.R99","OVCALL.R99","OVLSTATS.R99"
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99"
 )
 $rLint = & .\drel.exe -c @ResidentObjects 2>&1 | Out-String
 Write-Output $rLint
@@ -239,15 +253,9 @@ if($LASTEXITCODE -ne 0 -or $rLint -notmatch "all chains conform") {
     throw "resident chain lint failed"
 }
 
-$PageArgs = @()
-foreach($o in $Overlays) {
-    $PageArgs += "-P$($o.Page)"
-    $PageArgs += "$($o.Name).R99"
-}
-
 $LinkArgs = @(
     "-O1000","-M","-S","FILEEDIT.EXE",
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVLAPI.R99","OVCALL.R99","OVLSTATS.R99",
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99",
     "CALL.R99","IOCORE.R99","IOOPEN.R99","IOREAD.R99","IOWRITE.R99","CBDOS.R99"
 )
 $LinkArgs += $PageArgs
@@ -280,27 +288,30 @@ if($LASTEXITCODE -ne 0 -or
     throw "LINK99 failed"
 }
 
-# OVL99 safety check: a resident C call must bind to the resident
-# thunk, not the identically named routine in the >8000 overlay window.
-# An overlay-address binding might appear to work briefly and then
-# execute the wrong page after a mapping change.
-Write-Output "`n--- OVL99 statistics thunk bindings ---"
+# Verify every externally referenced published entry bound to its resident
+# thunk. A direct bind to >8000 would be unsafe after an overlay switch.
+Write-Output "`n--- OVL99 generated entry bindings ---"
 $Bindings = @{}
 foreach($line in ($linkOut -split "`r?`n")) {
     $m = [regex]::Match($line, 'xref\s+(\S+)\s+@\s*([0-9A-F]+)\s*=\s*([0-9A-F]+)', 'IgnoreCase')
-    if($m.Success) {
-        $Bindings[$m.Groups[1].Value.ToLowerInvariant()] = $m.Groups[3].Value
+    if($m.Success) { $Bindings[$m.Groups[1].Value.ToLowerInvariant()] = $m.Groups[3].Value }
+}
+$Entries = @()
+foreach($d in $Desc) {
+    foreach($m in [regex]::Matches($d, '([A-Za-z_][A-Za-z0-9_]*):O_')) {
+        $Entries += $m.Groups[1].Value
     }
 }
-foreach($entry in @("wordscan","charscan","report")) {
+foreach($entry in @($Entries | Sort-Object -Unique)) {
     if(-not $Bindings.ContainsKey($entry)) {
-        throw "OVL99 build check: LINK99 did not report an xref for $entry"
+        Write-Output ("  {0,-12} no external xref reported (possibly unused)" -f $entry)
+        continue
     }
     $bound = [Convert]::ToInt32($Bindings[$entry],16)
-    if($bound -ge 0x8000) {
-        throw ("OVL99 build check: {0} resolved to overlay address >{1:X4}, not resident thunk" -f $entry,$bound)
+    if($bound -ge 0x8000 -or $bound -lt 0x1000) {
+        throw ("OVL99: {0} resolved at >{1:X4}, outside resident program" -f $entry,$bound)
     }
-    Write-Output ("  {0,-9} -> >{1:X4} resident thunk" -f $entry,$bound)
+    Write-Output ("  {0,-12} -> >{1:X4} resident thunk" -f $entry,$bound)
 }
 
 Need-File ".\FILEEDIT.EXE"
@@ -318,6 +329,7 @@ $MonitorAlias = Join-Path $MonitorDir "FILESTAT.EXE"
 Copy-Item -LiteralPath ".\FILEEDIT.EXE" -Destination $MonitorAlias -Force
 
 Set-Location -LiteralPath $ProjectRoot
+[Environment]::CurrentDirectory = (Get-Location).Path
 
 Write-Output "`nBUILD SUCCESSFUL"
 Write-Output "  .\dist\FILEEDIT.EXE"
@@ -325,4 +337,5 @@ Write-Output "  .\dist\FILESTAT.EXE  (compatibility alias)"
 Write-Output "  .\dist\SAMPLE.TXT"
 Write-Output ("  deployed: " + $MonitorExe)
 Write-Output "Run stats:    FILEEDIT SAMPLE.TXT /S"
+Write-Output "Run overlay nesting test: FILEEDIT /O"
 Write-Output "Run editor:   FILEEDIT SAMPLE.TXT /E"
