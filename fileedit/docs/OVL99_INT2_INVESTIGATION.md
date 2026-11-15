@@ -1,7 +1,8 @@
 # OVL99 / FileEdit — INT2 during shell TYPE (hardware regression)
 
-Status: **OPEN / DO NOT MERGE TO MAIN.** Windows cross-build and `FILEEDIT /O`
-nested-call test passed, but post-save shell behaviour is not yet cleared.
+Status: **RETEST ON REPLACEMENT DISK IMAGE / DO NOT MERGE TO MAIN YET.**
+Previous disk image was reported corrupted by the user. All prior INT2/TYPE
+results are historical observations from that image, not confirmed OVL99 regressions.
 
 ## Observed on SBC (15 November 2026)
 
@@ -146,3 +147,26 @@ unless hard linking is an explicitly supported filesystem feature.
 If no read-only image/inspector exists, test a known-good file under
 a clean boot with the old FileEdit binary or without FileEdit at all
 and capture when repetition begins. Stop at the first interrupt.
+
+## Update: replacement disk image (15 November 2026)
+
+The user reports that the **previous disk image was corrupted** and has
+loaded a replacement image. New screenshot shows an image/transfer
+`LOAD ADDRESS: 1000` ending `SUCCESS.`, then `DIR2` without exception.
+
+The new volume lists `SAMPLE.TXT` at **10752 bytes** and `FILEEDIT.EXE`
+at **39936 bytes**; the old `SAMPLE.BAK` and `OVLTEST` files are not
+present. The older image had listed four 6144-byte text files. The
+difference reinforces treating prior read anomalies as specific to the
+old image; it does **not by itself** prove the OVL99 build is safe.
+
+**Reset the test baseline:** On the replacement disk, first read
+`SAMPLE.TXT` to completion with the shell's TYPE; next run
+`FILEEDIT /O`; then open the sample for editing, Save As to a unique
+new filename (leave original unchanged), modify one character and
+save again to exercise backup creation. Exit and read both new primary
+and backup files from the shell. Report any INT2 and stop writes if it
+recurs. Merge remains blocked until these tests pass.
+
+No shell, BDOS, backup, or overlay code fixes should be made merely in
+response to failures observed with the reportedly corrupted image.
