@@ -244,10 +244,7 @@ already-working OVL99 call gate.
 successfully navigated, saved, reopened and backed up 16 KB and about
 33 KB test documents across its data-bank boundaries. See
 [`docs/OVL99_PHASE2.md`](docs/OVL99_PHASE2.md) for the test
-procedure and
-[`docs/OVL99_INT2_INVESTIGATION.md`](docs/OVL99_INT2_INVESTIGATION.md)
-for the independently reproduced intermittent Shell `TYPE`/INT2
-issue, which this integration does not claim to fix.
+procedure.
 
 ## TMS9902 receive architecture
 
@@ -386,11 +383,7 @@ the main file retained `X0211` while `L33TEST.BAK` retained `0211`.
 That exercises the adaptive heap plus shell-window data bank while
 OVL99 controls the independent code-overlay window.
 
-The Windows cross-build has passed. An intermittent `TYPE` / INT2 fault
-has also been reproduced after SYSGEN **without FileEdit installed or
-running**. Its cause remains unresolved, and it is tracked separately in
-`docs/OVL99_INT2_INVESTIGATION.md`; it must not be reported as fixed by
-these overlay tests.
+The Windows cross-build has passed.
 
 For implementation and regression details, see `docs/OVL99_PHASE2.md`.
 The original tutorial documentation is retained for historical context.

@@ -130,9 +130,6 @@ EOF, saved as a new copy, edited at line 430 and saved; the reopened
 `0211` on that line. No hardware merge blocker was identified in these
 focused OVL99 tests.
 
-**Separate known issue:** An intermittent shell `TYPE` / INT2 failure was
-reproduced after SYSGEN even when no FileEdit executable was installed.
-No claim is made that this unrelated problem is fixed. See
-`OVL99_INT2_INVESTIGATION.md`. Broader editor feature regressions such
+Broader editor feature regressions such
 as paste, Find, and every statistic were not exhaustively repeated
 in this focused integration acceptance.

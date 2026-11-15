@@ -54,7 +54,11 @@ OVC1:
         B       @OVPANIC
 OVC2:
         MOV     *SP+,*R0+           ; caller return address
-        MOV     @CUR_WINA_ID,*R0+   ; previous overlay owner (0 = resident)
+        ; CUR_WINA_ID is the overlay that last owned segment 8.  It is NOT
+        ; reset when control returns to resident code, so for a resident
+        ; caller it may still name the last overlay used.  Restoring it on
+        ; return then just remaps the page that is already there.
+        MOV     @CUR_WINA_ID,*R0+   ; window owner at entry
         MOV     R0,@OVSP
         DECT    SP
         MOV     R2,*SP              ; preserve entry across OVLMGR
