@@ -1,6 +1,6 @@
 # FileEdit + OVL99: generated overlay glue and nested-call test
 
-**Branch:** `ovl99-fileedit-integration` (not merged into `main`).
+**Development branch:** `ovl99-fileedit-integration` (the tested integration source).
 
 This is the next integration stage after the initial handwritten Statistics
 thunks described in `OVL99_PHASE1.md`. The phase-one notes are retained as
@@ -11,7 +11,7 @@ thunks and adapters with generated ones.
 
 `fileedit/OVLMAP.TXT` lists each `.C` overlay module, its physical page,
 its logical overlay ID (assigned by map order), and its public functions.
-There are six overlays:
+There are seven overlays:
 
 | Page | Overlay | Published entries |
 |---|---|---|
@@ -21,6 +21,7 @@ There are six overlays:
 | 5 | VIEW | `viewfile` |
 | 6 | EDIT | `editstep` |
 | 7 | PASTE | `pasteedit` |
+| 8 | NAMEIO | `nmprompt` |
 
 The adapted OVL99 `tools/ovlgen.ps1` has two phases:
 
@@ -76,7 +77,7 @@ $env:FILEEDIT_SKIP_MONITOR_DEPLOY = "1"
 powershell -ExecutionPolicy Bypass -File .\make_SBC_FileEdit99.ps1
 ```
 
-A branch-specific Windows GitHub Actions workflow builds and uploads the
+A Windows GitHub Actions workflow builds and uploads the
 `FILEEDIT.EXE` binary. A successful Actions run proves the cross-toolchain
 build and linker checks, **not** correct execution on a physical SBC.
 
@@ -117,5 +118,21 @@ If the display says FAIL or the machine hangs, do not merge into `main`.
 5. Quit back to the shell, run an ordinary command, and confirm
    the shell segments and BDOS access are intact.
 
-**Merge rule:** remain on the integration branch until the Windows
-cross-build and SBC regressions have both passed.
+**Acceptance evidence (15 November 2026):** Windows cross-build passed;
+`FILEEDIT /O` returned `OVL99 NESTED PASS` on the TMS99105 SBC. Editing,
+Save As, saved changes, creation of automatic `.BAK` files and reloading
+were confirmed with both regular files and larger documents. A 16 KB
+banked document was edited past the 12 KB boundary at line 171:
+`L16TEST.TXT` retained `X0171` and `L16TEST.BAK` retained `0171`.
+A concatenated approximately 33 KB document was opened, navigated to
+EOF, saved as a new copy, edited at line 430 and saved; the reopened
+`L33TEST.TXT` retained `X0211` and `L33TEST.BAK` retained the unmodified
+`0211` on that line. No hardware merge blocker was identified in these
+focused OVL99 tests.
+
+**Separate known issue:** An intermittent shell `TYPE` / INT2 failure was
+reproduced after SYSGEN even when no FileEdit executable was installed.
+No claim is made that this unrelated problem is fixed. See
+`OVL99_INT2_INVESTIGATION.md`. Broader editor feature regressions such
+as paste, Find, and every statistic were not exhaustively repeated
+in this focused integration acceptance.
