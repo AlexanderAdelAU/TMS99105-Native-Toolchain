@@ -1,8 +1,10 @@
 # OVL99 / FileEdit — INT2 during shell TYPE (hardware regression)
 
-Status: **RETEST ON REPLACEMENT DISK IMAGE / DO NOT MERGE TO MAIN YET.**
-Previous disk image was reported corrupted by the user. All prior INT2/TYPE
-results are historical observations from that image, not confirmed OVL99 regressions.
+Status: **OVL99 hardware acceptance passed; independent shell TYPE/INT2 issue remains open.**
+The original disk image was reported corrupted. Subsequently, intermittent
+TYPE/INT2 was reproduced after SYSGEN without FileEdit or OVL99 running;
+it must therefore be investigated independently rather than treated as a
+proven overlay or automatic-backup defect.
 
 ## Observed on SBC (15 November 2026)
 
@@ -484,3 +486,36 @@ before modification, change one character near line 430, save, and
 verify the persisted copy and unmodified backup by reopening both.
 Preserve the source document. Treat the intermittent standalone shell
 INT2 issue as unresolved separately.
+
+## Final focused OVL99 acceptance: 33 KB saved and backup verified (15 Nov 2026)
+
+Following the successful 16 KB boundary test, the user combined two
+16 KB files into an approximately 33 KB banked-document test. The
+generated-thunk OVL99 build displayed the complete document through
+logical line 442, traversing the heap and C/D page-1 editor storage.
+
+User then selected Save As `L33TEST.TXT`, receiving the confirmation
+`Saved and verified: L33TEST.TXT`; edited the start of logical line
+430 and saved again. The screenshots of independently reopened files
+confirm:
+
+- `L33TEST.TXT`, line 430: `X0211 BANKED BUFFER ...`
+- `L33TEST.BAK`, line 430: `0211 BANKED BUFFER ...`
+
+This demonstrates that the edit survived disk persistence and that the
+automatic backup preserved the pre-edit contents at the modified position.
+The original concatenated `LARGE.TXT` was preserved.
+
+**Final test conclusion:** On the TMS99105 SBC, OVL99 nested
+cross-overlay calls, generated thunks, editor rendering/navigation,
+12 KiB and >32 KiB adaptive data banking, Save As, ordinary save, and
+previous-version backup have passed the focused acceptance tests.
+The cross-platform Windows toolchain build has passed as well.
+
+**Important limit:** The separate, intermittent shell `TYPE`/INT2
+problem remains unsolved, but was shown to reproduce immediately after
+SYSGEN without FileEdit installed or run; it cannot be uniquely attributed
+to OVL99. Likewise, not every editor command (Find, Paste, all
+statistics) has been re-exercised during this focused session. The
+integration can be accepted for its tested scope without claiming the
+entire standalone shell fault has been repaired.
