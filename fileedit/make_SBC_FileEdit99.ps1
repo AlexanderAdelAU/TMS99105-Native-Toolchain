@@ -14,7 +14,6 @@ $ToolsDir    = Join-Path $ProjectRoot "tools"
 $LibDir      = Join-Path $ProjectRoot "lib"
 $SrcResident = Join-Path $ProjectRoot "src\resident"
 $SrcOverlay  = Join-Path $ProjectRoot "src\overlays"
-$IncludeDir  = Join-Path $ProjectRoot "include"
 $TestsDir    = Join-Path $ProjectRoot "tests"
 $OverlayMap  = Join-Path $ProjectRoot "OVLMAP.TXT"
 $Generator   = Join-Path $ToolsDir "ovlgen.ps1"
@@ -43,7 +42,7 @@ function Need-Dir($Path) {
 }
 
 # Verify the project-local inputs before deleting the old build.
-foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$IncludeDir,$TestsDir)) {
+foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$TestsDir)) {
     Need-Dir $d
 }
 Need-Dir $MonitorDir
@@ -114,7 +113,6 @@ Test-KnownIOLibSet $BuildDir "STAGED IOLIB CHECK"
 # Stage ALL application source files and includes.
 Copy-Item -Path (Join-Path $SrcResident "*") -Destination $BuildDir -Force
 Copy-Item -Path (Join-Path $SrcOverlay  "*") -Destination $BuildDir -Force
-Copy-Item -Path (Join-Path $IncludeDir  "*") -Destination $BuildDir -Force
 
 # Stage the tutorial sample input only. Large-file test data is user-supplied.
 Copy-Item -LiteralPath (Join-Path $TestsDir "SAMPLE.TXT") -Destination $BuildDir -Force
@@ -304,8 +302,7 @@ foreach($d in $Desc) {
 }
 foreach($entry in @($Entries | Sort-Object -Unique)) {
     if(-not $Bindings.ContainsKey($entry)) {
-        Write-Output ("  {0,-12} no external xref reported (possibly unused)" -f $entry)
-        continue
+        throw "OVL99: no LINK99 external xref for published entry $entry"
     }
     $bound = [Convert]::ToInt32($Bindings[$entry],16)
     if($bound -ge 0x8000 -or $bound -lt 0x1000) {
