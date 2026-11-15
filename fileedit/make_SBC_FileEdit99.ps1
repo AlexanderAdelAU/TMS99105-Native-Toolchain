@@ -28,6 +28,7 @@ $DistDir     = Join-Path $ProjectRoot "dist"
 #
 # Keep this workspace-relative: no drive letter or machine-specific absolute path.
 $MonitorDir = Join-Path $ProjectRoot "..\..\TMS99105_SBC\MONITOR"
+$SkipMonitor = ($env:FILEEDIT_SKIP_MONITOR_DEPLOY -eq "1")
 
 function Need-File($Path) {
     if(-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
@@ -45,7 +46,7 @@ function Need-Dir($Path) {
 foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$TestsDir)) {
     Need-Dir $d
 }
-Need-Dir $MonitorDir
+if(-not $SkipMonitor) { Need-Dir $MonitorDir }
 Need-File $OverlayMap
 Need-File $Generator
 
@@ -319,11 +320,15 @@ Copy-Item -LiteralPath ".\FILEEDIT.EXE" -Destination (Join-Path $DistDir "FILEED
 Copy-Item -LiteralPath ".\FILEEDIT.EXE" -Destination (Join-Path $DistDir "FILESTAT.EXE") -Force
 Copy-Item -LiteralPath ".\SAMPLE.TXT"   -Destination (Join-Path $DistDir "SAMPLE.TXT")   -Force
 
-# Make the executable immediately available to the SBC monitor/download project.
-$MonitorExe = Join-Path $MonitorDir "FILEEDIT.EXE"
-Copy-Item -LiteralPath ".\FILEEDIT.EXE" -Destination $MonitorExe -Force
-$MonitorAlias = Join-Path $MonitorDir "FILESTAT.EXE"
-Copy-Item -LiteralPath ".\FILEEDIT.EXE" -Destination $MonitorAlias -Force
+# Default behaviour: deploy to the sibling SBC MONITOR workspace.
+# CI and isolated checkouts set FILEEDIT_SKIP_MONITOR_DEPLOY=1 to build
+# without requiring any unrelated Windows workspace directories.
+if(-not $SkipMonitor) {
+    $MonitorExe = Join-Path $MonitorDir "FILEEDIT.EXE"
+    Copy-Item -LiteralPath ".\FILEEDIT.EXE" -Destination $MonitorExe -Force
+    $MonitorAlias = Join-Path $MonitorDir "FILESTAT.EXE"
+    Copy-Item -LiteralPath ".\FILEEDIT.EXE" -Destination $MonitorAlias -Force
+}
 
 Set-Location -LiteralPath $ProjectRoot
 [Environment]::CurrentDirectory = (Get-Location).Path
@@ -332,7 +337,12 @@ Write-Output "`nBUILD SUCCESSFUL"
 Write-Output "  .\dist\FILEEDIT.EXE"
 Write-Output "  .\dist\FILESTAT.EXE  (compatibility alias)"
 Write-Output "  .\dist\SAMPLE.TXT"
-Write-Output ("  deployed: " + $MonitorExe)
+if($SkipMonitor) {
+    Write-Output "  MONITOR deployment skipped by FILEEDIT_SKIP_MONITOR_DEPLOY"
+}
+else {
+    Write-Output ("  deployed: " + $MonitorExe)
+}
 Write-Output "Run stats:    FILEEDIT SAMPLE.TXT /S"
 Write-Output "Run overlay nesting test: FILEEDIT /O"
 Write-Output "Run editor:   FILEEDIT SAMPLE.TXT /E"
