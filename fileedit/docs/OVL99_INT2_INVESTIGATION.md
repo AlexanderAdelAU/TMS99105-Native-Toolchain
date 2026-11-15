@@ -432,3 +432,26 @@ contains the `X` when reopened or that `L16TEST.BAK`
 contains the unmodified line. Next check: reopen each file and
 inspect line 171. Do not mark byte-for-byte backup verification
 as complete until then.
+
+
+## 16 KiB bank-boundary edit/save/backup: verified (15 Nov 2026)
+
+The user reopened BOTH test files in the OVL99 FileEdit editor at the
+12 KiB document-bank crossing:
+
+- `L16TEST.TXT`, line 171: `X0171 BANKED BUFFER REGRESSION LINE: ...`
+- `L16TEST.BAK`, line 171: `0171 BANKED BUFFER REGRESSION LINE: ...`
+  (no prefixed `X`)
+
+Both show the surrounding lines 162-181 consistently, and their previously
+observed `DIR2` sizes are 16896 bytes each. This confirms the saved edit
+persisted across reopening and the automatic backup retained the preceding
+contents at the changed location. The 16 KiB / 12 KiB bank-boundary regression
+is **PASS** for the observed navigation, edit, save and backup operations.
+
+**Next:** On the same isolated OVL99 branch, transfer
+`fileedit/tests/LARGE30.TXT` (30,000 bytes, lines 0001-0447 plus a
+trailing X row) using a distinct name, then navigate beyond approximately
+24 KiB to exercise the optional shell-window document bank. Test reading
+first; avoid overwriting the supplied original. The full 30 KiB edit/save
+regression and intermittent independent TYPE/INT2 investigation remain open.
