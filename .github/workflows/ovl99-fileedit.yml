@@ -1,0 +1,37 @@
+name: OVL99 FileEdit Windows build
+
+on:
+  push:
+    branches:
+      - ovl99-fileedit-integration
+    paths:
+      - 'fileedit/**'
+      - '.github/workflows/ovl99-fileedit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile, assemble, DREL-lint, generate thunks and link FileEdit
+        shell: powershell
+        env:
+          FILEEDIT_SKIP_MONITOR_DEPLOY: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location fileedit
+          & .\make_SBC_FileEdit99.ps1
+          if (-not (Test-Path 'dist/FILEEDIT.EXE')) {
+            throw 'FileEdit executable was not produced'
+          }
+      - name: Store cross-built executable for SBC hardware validation
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fileedit-ovl99-windows-build
+          path: fileedit/dist/FILEEDIT.EXE
+          if-no-files-found: error
