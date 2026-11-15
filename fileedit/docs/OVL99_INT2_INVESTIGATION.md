@@ -410,3 +410,25 @@ editing anything; modify a character around line 170 in the *copy*,
 save and verify the new file and its preceding-version `.BAK`.
 Preserve original `LARGE.TXT`. Afterward exercise the 30 KiB file
 that crosses the editor's shell-window data-bank boundary.
+
+
+## 16 KiB test: edit/save across 12 KiB data-bank boundary (SBC)
+
+The user used the OVL99 FileEdit build to Save As a copy of
+`LARGE.TXT` as `L16TEST.TXT`, navigated to line 171 (beyond the
+first 12 KiB `>9000–>BFFF` bank), and inserted an `X` before
+the line's `0171 BANKED BUFFER...` prefix. The editor screenshot
+shows `Ln 171/221 Col 2`, the inserted `X`, and no `[MOD]`
+flag after saving.
+
+A subsequent `DIR2` screenshot shows `L16TEST.TXT` and
+`L16TEST.BAK` at **16,896 bytes each**, alongside the untouched
+`LARGE.TXT`. No exception is shown.
+
+This supports a successful editor-side modification and save
+across the 12 KiB bank boundary, with automatic backup **creation**.
+It does not yet verify that the persisted `L16TEST.TXT`
+contains the `X` when reopened or that `L16TEST.BAK`
+contains the unmodified line. Next check: reopen each file and
+inspect line 171. Do not mark byte-for-byte backup verification
+as complete until then.
