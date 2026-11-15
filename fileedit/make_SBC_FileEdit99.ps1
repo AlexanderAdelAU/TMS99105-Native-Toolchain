@@ -280,6 +280,29 @@ if($LASTEXITCODE -ne 0 -or
     throw "LINK99 failed"
 }
 
+# OVL99 safety check: a resident C call must bind to the resident
+# thunk, not the identically named routine in the >8000 overlay window.
+# An overlay-address binding might appear to work briefly and then
+# execute the wrong page after a mapping change.
+Write-Output "`n--- OVL99 statistics thunk bindings ---"
+$Bindings = @{}
+foreach($line in ($linkOut -split "`r?`n")) {
+    $m = [regex]::Match($line, 'xref\s+(\S+)\s+@\s*([0-9A-F]+)\s*=\s*([0-9A-F]+)', 'IgnoreCase')
+    if($m.Success) {
+        $Bindings[$m.Groups[1].Value.ToLowerInvariant()] = $m.Groups[3].Value
+    }
+}
+foreach($entry in @("wordscan","charscan","report")) {
+    if(-not $Bindings.ContainsKey($entry)) {
+        throw "OVL99 build check: LINK99 did not report an xref for $entry"
+    }
+    $bound = [Convert]::ToInt32($Bindings[$entry],16)
+    if($bound -ge 0x8000) {
+        throw ("OVL99 build check: {0} resolved to overlay address >{1:X4}, not resident thunk" -f $entry,$bound)
+    }
+    Write-Output ("  {0,-9} -> >{1:X4} resident thunk" -f $entry,$bound)
+}
+
 Need-File ".\FILEEDIT.EXE"
 
 # Only final deliverables leave build\.
