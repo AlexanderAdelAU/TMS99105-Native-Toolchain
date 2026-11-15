@@ -31,3 +31,13 @@ charscan()
         c = fsgetc();
     }
 }
+
+extern ovprobec();
+ovprobeb(n)
+int n;
+{
+    int x;
+    x = ovprobec(n + 1);
+    if(x != 108) return -2;
+    return x + 1;
+}
