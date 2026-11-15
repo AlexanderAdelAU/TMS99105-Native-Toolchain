@@ -195,3 +195,27 @@ OVL99 fault**.
 Remaining gate: rerun clean-image `FILEEDIT /O`, Save As,
 subsequent save with automatic backup, then verify both new files with
 the shell and test larger document-bank boundaries. No merge yet.
+
+
+## Clean-image FileEdit save/backup regression (user screenshots, 15 Nov 2026)
+
+**Passed on hardware:**
+- `FILEEDIT /O` printed `OVL99 NESTED PASS`.
+- `TYPE SAMPLE.TXT` completed normally on the replacement image.
+- `FILEEDIT SAMPLE.TXT /E`, then Save As `OVLTEST.TXT`, printed
+  `Saved and verified: OVLTEST.TXT`.
+- User edited the start of OVLTEST.TXT (inserted an `A`) and saved again.
+- After returning normally to the shell, `DIR2` lists `OVLTEST.TXT`
+  and `OVLTEST.BAK`, both 10752 bytes; no INT2 was reported.
+- `TYPE OVLTEST.TXT` shows the inserted `A` at the start.
+
+**Still pending:**
+- Read `OVLTEST.BAK` and verify that it contains the *pre-edit*
+  first line; existence and equal file sizes alone cannot prove this.
+- Verify full-document content and bank-boundary edits/reopens with
+  larger files, before considering merge to main.
+
+These results strongly suggest earlier TYPE/INT2 failures were related
+to the previously reported corrupted disk image rather than proven
+OVL99 overlay or return-stack failures. Do not treat the earlier image's
+errors as confirmed OVL99 regressions.
