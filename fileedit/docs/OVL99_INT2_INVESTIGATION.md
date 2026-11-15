@@ -276,3 +276,32 @@ fix is justified by these observations alone.
 **Status correction:** OVL99 Save As and backup *creation* passed;
 backup full-file read and reliable post-save shell operation are NOT
 yet verified. No merge to main.
+
+
+## CTRL-Q during cold-boot TYPE stall (follow-up)
+
+User reports `TYPE SAMPLE.TXT` stalls mid-word even after a cold boot
+without running FileEdit. Pressing Ctrl-Q does not resume serial output:
+the screen subsequently shows `<TMS9900 DISC MONITOR V5.5F>` and the
+monitor's `>` prompt, then `??` when an unrecognized input is
+entered. No INT2 dump accompanies this specific screenshot.
+
+The monitor source (`TMS99105-SBC/Disc_Monitor/DISC_MONITOR_V56F.A99`)
+prints this banner in `BANNER`, which is *not* the normal shell TYPE
+pagination UI; its command table has a literal uppercase `Q` QBOOT
+command but no explicit Ctrl-Q/XON monitor command. The image therefore
+does not establish whether Ctrl-Q triggered a reset/reentry or whether
+the machine had already lost its shell execution context.
+
+Separate confirmed TYPE source concern: shell `TYPE.A99` swaps R3
+before `COUT`, and swaps R3 again afterwards to test for LF, but BDOS
+`BDOS61.A99` `COUT` itself performs `SWPB R3` and does *not*
+restore R3. Consequently the LF comparison in TYPE examines the
+wrong byte (typically the preceding character), making pagination
+unreliable. This is a source-level defect and a candidate for a
+separate, reviewed shell fix, **not yet proven to cause the mid-word
+stall or INT2 reports**.
+
+Do not attribute a cold-boot TYPE stall to FileEdit's automatic
+backup without further evidence. Keep OVL99 unmerged. Avoid disk
+writes and preserve the files pending controlled shell/BDOS testing.
