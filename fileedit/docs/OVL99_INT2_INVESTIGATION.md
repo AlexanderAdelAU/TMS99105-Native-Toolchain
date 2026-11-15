@@ -455,3 +455,32 @@ trailing X row) using a distinct name, then navigate beyond approximately
 24 KiB to exercise the optional shell-window document bank. Test reading
 first; avoid overwriting the supplied original. The full 30 KiB edit/save
 regression and intermittent independent TYPE/INT2 investigation remain open.
+
+
+## 33 KB combined document: read/navigation to EOF on SBC (15 Nov 2026)
+
+Rather than the supplied 30,000-byte file, the user concatenated two
+16 KB banked-buffer regression documents into one file of approximately
+33 KB (`LARGE.TXT`). In FileEdit under the generated OVL99 overlay
+architecture, the editor screenshot at EOF displays the second copy's
+final numbered lines (on-screen logical lines 423-439, with text ending
+`0220 BANKED BUFFER REGRESSION LINE...`), followed by blank trailing
+lines; the status shows `Ln 442/442 Col 1`. No exception is visible.
+
+The current `EDITBUF.C` derives capacity at runtime as
+`32767 + ebheapsz`, with logical data composed from 24 KiB of
+segment 9-B banks, the claimed resident heap, and an 8 KiB page-1
+segment C-D shell window. A ~33,000-byte normalized file exceeds
+the 32767-byte base limit, so this is useful evidence that the adaptive
+buffer is operational as well as the independent code mapping.
+
+**Observed PASS:** read-only loading, scrolling, and end-of-file display
+of the approximately 33 KB combined text file. File size and complete
+byte-for-byte content are not yet independently verified here, and
+the 33 KB file has **not yet been edited/saved/reopened**.
+
+Next safe regression: Save As a unique copy of this large document
+before modification, change one character near line 430, save, and
+verify the persisted copy and unmodified backup by reopening both.
+Preserve the source document. Treat the intermittent standalone shell
+INT2 issue as unresolved separately.
