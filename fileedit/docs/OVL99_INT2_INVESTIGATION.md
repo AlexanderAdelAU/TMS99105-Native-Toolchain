@@ -219,3 +219,19 @@ These results strongly suggest earlier TYPE/INT2 failures were related
 to the previously reported corrupted disk image rather than proven
 OVL99 overlay or return-stack failures. Do not treat the earlier image's
 errors as confirmed OVL99 regressions.
+
+
+## Backup contents verified on hardware (15 Nov 2026)
+
+The user read `OVLTEST.BAK` in the shell and supplied a screenshot
+showing its first line begins `/*` (the original text). The modified
+`OVLTEST.TXT` screenshot instead showed `A/*` at the beginning.
+Thus the automatic backup demonstrably contains the pre-edit content
+at the modified position, not merely a same-sized duplicate. Save,
+backup, and normal shell return have passed on the clean replacement
+disk image. Large-file bank-boundary editing remains to be tested.
+
+Earlier-image INT2 symptoms remain historical observations associated
+with the reportedly corrupted disk image; they have not recurred in
+the clean-image tests shown so far. Do not merge before the large-file
+regression is complete.
