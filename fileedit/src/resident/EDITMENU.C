@@ -15,9 +15,9 @@ extern fsprobe();
 extern fssave();
 extern fssavas();
 extern fsequal();
-extern runword();
-extern runchar();
-extern runrpt();
+extern wordscan();
+extern charscan();
+extern report();
 extern viewctl();
 extern editctl();
 extern ebload();
@@ -332,18 +332,18 @@ statone()
         return;
     }
 
-    runword();
+    wordscan();
 
     if(fsrewind() == 0) {
         pausekey();
         return;
     }
 
-    runchar();
+    charscan();
     fsclose();
 
     trmclear();
-    runrpt();
+    report();
     pausekey();
 }
 

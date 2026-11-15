@@ -8,7 +8,7 @@
 
 extern ebseek();
 extern ebhome();
-extern runview();
+extern viewfile();
 extern trmkey();
 extern trmshow();
 extern trmhide();
@@ -126,7 +126,7 @@ viewctl()
 
     while(done == 0) {
         ebseek(vtop);
-        runview();
+        viewfile();
         key = vkey();
 
         if(key == 1)

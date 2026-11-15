@@ -3,13 +3,13 @@
 **
 ** Persistent cursor/document state stays resident.  The heavier key parser,
 ** navigation and editing operations now live in OVL_EDIT.  OVL_VIEW renders
-** frames and OVL_EDIT processes exactly one key, so neither overlay ever calls
-** another overlay while it is mapped.
+** frames and OVL_EDIT processes exactly one key; both are called through
+** OVL99-generated resident thunks.
 */
 
-extern runview();
-extern runedit();
-extern runpaste();
+extern viewfile();
+extern editstep();
+extern pasteedit();
 extern trmshow();
 extern trmhide();
 extern trmclear();
@@ -89,30 +89,30 @@ editctl()
 
     while(edflag != 2) {
         if(redraw == 4) {
-            runview();
+            viewfile();
             edflag = 1;
             redraw = 1;
             continue;
         }
         if(redraw == 5) {
-            runpaste();
+            pasteedit();
             edflag = 1;
             redraw = 1;
             continue;
         }
         if(redraw == 1) {
             ebseek(etop);
-            runview();
+            viewfile();
         }
         else if(redraw == 3) {
             /* Fast edit path: OVL_VIEW repaints only the current row. */
             ebseek(eline);
-            runview();
+            viewfile();
         }
 
         /* OVL_EDIT waits for and processes exactly one key. */
         oldtotal = etotal;
-        runedit();
+        editstep();
 
         /* Backspace/Delete can remove a CR.  They request the cheap line path
            in OVL_EDIT; a changed logical-line count promotes it here. */

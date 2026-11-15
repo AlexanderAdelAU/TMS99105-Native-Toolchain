@@ -1,4 +1,16 @@
 /*
+** OVL_NAMEIO.C -- FileEdit filename prompt now occupies a separate code page.
+**
+** This is a safe OVL99 extraction: the caller, filename buffer, and terminal
+** services are resident. The modal prompt never requests a second overlay.
+** Moving its code out of the resident image increases IOLIB heap headroom
+** for the two concurrent fopen() buffers used by cpyback().
+*/
+#asm
+        AORG    08000H
+#endasm
+
+/*
 ** NAMEIO.C -- resident filename prompt for Step 6.2.
 **
 ** Filename entry is deliberately small and terminal-safe: printable non-space

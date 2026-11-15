@@ -1,0 +1,11 @@
+# OVL99 declarative map for FileEdit.
+# module       physical-page  logical-overlay  public-entry-points
+# All six code overlays execute in segment 8 (>8000->8FFF).
+# Segments 9-B are document banks; NEVER map overlay code there.
+OVL_WORD        2        WORD     wordscan ovprobea
+OVL_CHAR        3        CHAR     charscan ovprobeb
+OVL_RPT         4        RPT      report ovprobec
+OVL_VIEW        5        VIEW     viewfile
+OVL_EDIT        6        EDIT     editstep
+OVL_PASTE       7        PASTE    pasteedit
+OVL_NAMEIO      8        NAMEIO   nmprompt

@@ -78,3 +78,15 @@ wordscan()
     if(saw && lastnl == 0)
         nline = nline + 1;
 }
+
+/* OVL99 proof: WORD -> CHAR -> RPT -> CHAR -> WORD -> resident.
+** This caller resumes executing WORD code only after the mapping returns.
+*/
+extern ovprobeb();
+ovprobea()
+{
+    int x;
+    x = ovprobeb(7);
+    if(x != 109) return -1;
+    return x + 1;
+}
