@@ -305,3 +305,52 @@ stall or INT2 reports**.
 Do not attribute a cold-boot TYPE stall to FileEdit's automatic
 backup without further evidence. Keep OVL99 unmerged. Avoid disk
 writes and preserve the files pending controlled shell/BDOS testing.
+
+
+## Standalone reproduction after SYSGEN: OVL99 is not running
+
+User reports a fresh SYSGEN and boot banner:
+
+```text
+Shell Version 6.5
+TMS99105 SBC V4 - Paged Memory
+```
+
+`DIR` shows only shell/BDOS/command modules, XMODEM, DIR2. No
+`FILEEDIT.EXE` is listed. User transferred the approximately 16 KiB
+bank-boundary test using `XMODEM LARGE.TXT` and received
+`LOAD ADDRESS: 1000` and `SUCCESS.`. The standalone shell command
+`TYPE LARGE.TXT` then printed four complete 0001-0004 lines and
+part of line 0005 before:
+
+```text
+INT2 PC:9808 WP:0230 ST:2080 SEG:0009 PAGE:0000
+MAP:0000 ... (all zeros)
+<TMS9900 DISC MONITOR V5.5F>
+```
+
+This is an **independent reproduction with no FileEdit or OVL99 run**.
+It rules out OVL99's live paging and FileEdit's automatic backup as
+the immediate cause of this occurrence. It does not independently
+establish that the transferred file is intact, that the hardware is
+healthy, or which shell/BDOS/monitor instruction caused it.
+
+The interrupted `PC >9808` is in segment 9 rather than the shell's
+paged TYPE code at `>D000`; `WP >0230` is the shell workspace. The
+stoppage occurs within the first ~512 bytes of display (around the
+fifth ~70-byte line), suggesting the console output/execution path is
+worth auditing before suspecting a second sector read or crossing the
+4-KiB block chain. An unverified exact file byte count is not enough
+to exclude file data corruption outright.
+
+Investigate independently under the shell project:
+- TYPE's BDOS `COUT` call/return path, register preservation, and
+  `R3` double byte-swap; this is a genuine TYPE pagination defect,
+  but not yet a demonstrated cause of INT2.
+- The shell's segment-D PSEL/gate state and the monitor's INT2 vector.
+- The TX/interrupt handling and its effect on the shell workspace/stack.
+- Compare a short text file under 512 bytes with LARGE.TXT, and
+  record whether the interrupt recurs at a fixed displayed offset.
+
+Leave OVL99 unchanged and unmerged. Do not ask the user to delete
+backups or rerun FileEdit to reproduce this particular fault.
