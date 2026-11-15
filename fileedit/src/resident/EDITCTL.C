@@ -3,7 +3,8 @@
 **
 ** Persistent cursor/document state stays resident.  The heavier key parser,
 ** navigation and editing operations now live in OVL_EDIT.  OVL_VIEW renders
-** frames and OVL_EDIT processes exactly one key, and they call each other only through OVL99-generated thunks.
+** frames and OVL_EDIT processes exactly one key; both are called through
+** OVL99-generated resident thunks.
 */
 
 extern viewfile();
