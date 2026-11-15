@@ -1,0 +1,77 @@
+; OVCALL.A99 -- OVL99 nested-call gate, sourced from the supplied OVL99 demo.
+; One frame per live cross-overlay call.  Resident code and overlay code
+; both call the same published function names through resident thunks.
+;
+; This first integration tests WORD, CHAR, and REPORT.  Editor/view/paste
+; continue using their proven adapters until the statistics test is verified.
+;
+; IMPORTANT: overlay string/data pointers may not cross an overlay switch.
+        DXOP    CALL,6
+        DXOP    RET,7
+        DXOP    WHEX,10
+
+R0      EQU     0
+R1      EQU     1
+R2      EQU     2
+SP      EQU     10
+
+        EXT     OVLMGR
+        EXT     OVLMGR_INIT
+        EXT     CUR_WINA_ID
+
+OVDEPTH EQU     16
+
+OVSTACK:
+        BSS     OVDEPTH*4
+OVSTKEND:
+OVSP:
+        WORD    OVSTACK
+
+; Standard Small-C callable initializer; replaces FileEdit's old
+; OVLAPI ovlinit.  Resets both mapper state and the return-frame stack.
+ovlinit:
+        CALL    @OVLMGR_INIT
+        LI      R0,OVSTACK
+        MOV     R0,@OVSP
+        RET
+
+OVPANIC:
+        LI      R1,0DEADH
+        WHEX    R1
+        JMP     OVPANIC
+
+; R1 = desired logical overlay ID; R2 = entry within >8000 window.
+; Entry is a branch from the public thunk, so the C call frame is intact.
+OVCALL:
+        C       R1,@CUR_WINA_ID
+        JNE     OVC1
+        B       *R2                  ; same-owner fast path
+
+OVC1:
+        MOV     @OVSP,R0
+        CI      R0,OVSTKEND
+        JL      OVC2
+        B       @OVPANIC
+OVC2:
+        MOV     *SP+,*R0+           ; caller return address
+        MOV     @CUR_WINA_ID,*R0+   ; previous overlay owner (0 = resident)
+        MOV     R0,@OVSP
+        DECT    SP
+        MOV     R2,*SP              ; preserve entry across OVLMGR
+        CALL    @OVLMGR
+        MOV     *SP+,R2
+        CALL    *R2                 ; callee uses normal Small-C ABI
+        MOV     @OVSP,R2
+        DECT    R2
+        MOV     *R2,R1              ; owner to restore
+        DECT    R2
+        MOV     R2,@OVSP
+        CALL    @OVLMGR
+        MOV     @OVSP,R2
+        DECT    SP
+        MOV     *R2,*SP             ; original caller return address
+        RET
+
+        ENT     OVCALL
+        ENT     ovlinit
+        END
