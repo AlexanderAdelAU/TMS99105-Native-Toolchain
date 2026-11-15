@@ -30,6 +30,15 @@ rather than returning to the interrupted program. The monitor vector
 table labels the low interrupt vectors as FDC1797 interrupt vectors.
 ST low nibble `3` enables interrupt levels up to three.
 
+**Further source cross-check:** `Small-Shell-for-the-TMS9900/CORE.INC`
+(the generated symbol map for Shell V6.5) places `CHKSYS` at `>C10A`,
+so `>C10E` is the next instruction in the shell's normal command-dispatch
+path (`JNE DOCMD1`). If the board runs this same shell layout, the
+interrupt occurred in command dispatch, **not** in TYPE's command-page
+output loop. We have not verified that the loaded shell is byte-identical
+to this repository's V6.5 listing. That means the unexpected INT2 is
+especially worth isolating from any early EOF/truncation in OVLTEST.BAK.
+
 The PC `>C10E` lies in the shell core address range; this occurred
 during shell TYPE rather than during execution of FileEdit's backup
 copy loop. The cause (unacknowledged hardware interrupt, filesystem/
@@ -43,7 +52,9 @@ problem) is **NOT yet established**.
 After a fresh power-on/reboot to establish known mapper state, without
 running the new FileEdit first:
 
-1. `DIR` — verify the files are visible.
+1. `DIR` — verify the files are visible. Run read-only `DIR2` (present on
+   the user's volume) if supported, and compare the reported sizes of
+   SAMPLE.TXT, OVLTEST.TXT and OVLTEST.BAK.
 2. `TYPE SAMPLE.TXT` — previously existing file; stop after one page
    if needed.
 3. `TYPE OVLTEST.TXT` — new primary file.
