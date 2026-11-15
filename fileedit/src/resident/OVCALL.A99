@@ -2,8 +2,8 @@
 ; One frame per live cross-overlay call.  Resident code and overlay code
 ; both call the same published function names through resident thunks.
 ;
-; This first integration tests WORD, CHAR, and REPORT.  Editor/view/paste
-; continue using their proven adapters until the statistics test is verified.
+; All six FileEdit overlays use generated public thunks.  The single
+; executable overlay window is segment 8; document banking stays separate.
 ;
 ; IMPORTANT: overlay string/data pointers may not cross an overlay switch.
         DXOP    CALL,6
