@@ -150,7 +150,12 @@ function Assemble($Name) {
         throw "compiled/handwritten assembly input missing: $Name"
     }
     Write-Output ("  input: " + $asm)
-    $o = & .\r99.exe $Name SCHC 2>&1 | Out-String
+    # Legacy R99's S/H flags choose DOS drive letters explicitly.
+    # Avoid hard-coding C: because GitHub Windows runners use D:.
+    $drive = ([IO.Path]::GetPathRoot((Get-Location).Path)).Substring(0,1).ToUpperInvariant()
+    $r99Flags = "S${drive}H${drive}"
+    Write-Output ("  R99 drive flags: " + $r99Flags)
+    $o = & .\r99.exe $Name $r99Flags 2>&1 | Out-String
     Write-Output $o
     if($o -notmatch "No error\(s\)") {
         throw "assemble failed: $Name"
