@@ -373,3 +373,22 @@ Do not change TYPE, BDOS, OVL99 or LINK99 on the assumption that
 large output consistently fails. Continue the original OVL99 hardware
 validation with a read-only LARGE.TXT FileEdit editor test after a
 clean shell run, noting that intermittent faults may still recur.
+
+
+## Read-only FileEdit >12 KiB document-bank navigation passes on SBC
+
+User supplied a screenshot from the OVL99 FileEdit editor displaying
+`LARGE.TXT` lines 165 through 184 with correct, sequential line
+numbers and text. The status reports `Ln 184/221 Col 1`. The known
+test document has ~75 bytes per line, so this position crosses the
+first 12 KiB document-bank boundary near line 164. No visible
+corruption or INT2 in this observed editor session.
+
+**Verified:** read-only navigation/rendering beyond the first
+`>9000–>BFFF` editor-data bank using the generated OVL99 overlays.
+
+**Not yet verified:** last-line navigation, saving a modification at
+this boundary, reloading to verify content, and a larger file that
+crosses the editor's 24 KiB/shell-window boundary.
+
+No merge to `main` until these regressions are evaluated.
