@@ -87,3 +87,62 @@ links successfully in GitHub Actions, and FileEdit's name prompt is
 now its own generated thunk. It must NOT be promoted to `main`
 until the cause of this INT2 observation is understood and the
 large-file and save/restore regression suite passes.
+
+
+## Follow-up after cold boot (user screenshots, 15 November 2026)
+
+The user obtained the following **read-only** results:
+
+- `DIR2` lists `SAMPLE.TXT`, `SAMPLE.BAK`, `OVLTEST.TXT` and
+  `OVLTEST.BAK` at **6144 bytes each** (12 sectors; two 4 KiB blocks).
+  Directory size alone does not validate BAT chains or sector contents.
+- After a cold boot, `TYPE SAMPLE.TXT` started output and apparently
+  hung before the expected end of the file.
+- `TYPE OVLTEST.TXT` displayed the document prologue and then the
+  monitor printed `INT2 PC:980E WP:0230 ST:8080 SEG:0009 PAGE:0000`
+  followed by a zeroed mapper dump and monitor prompt.
+- Another screenshot displays the shell banner and a longer section of
+  the ARTEST content, but does not establish successful end-of-file.
+- User suspects the same text group/buffer is being reread. This is
+  **not yet byte-for-byte verified**; it could be repeated physical
+  contents or repeated DMA/sector output.
+
+Interpretation:
+
+- `>980E` is segment 9 (FileEdit's document-window address space),
+  **not a valid shell execution address**. The monitor captured shell
+  workspace `>0230`. This may be a bad PC/return address, erroneous
+  mapping, interrupt/context issue or a memory/data corruption event;
+  these observations do not establish the cause.
+- The earlier `>C10E` interrupt occurred in the shell command-
+  dispatcher address range. Different PCs strengthen the case for
+  preserving logs and isolating the IRQ context, rather than assuming
+  one failing FileEdit instruction.
+- In the available monitor source `INT2` is interrupt-vector 2.
+  It is **not a generic CPU exception label**. The source's
+  INT2 handler prints the interrupted context and re-enters monitor.
+- Because this recurs after a cold boot when FileEdit is not running,
+  a stale resident OVL99 return frame alone is insufficient to explain
+  the current symptoms. Disk content/chain damage, BDOS sequential
+  read behaviour, TYPE command code, or hardware interrupt handling
+  remain possible.
+- The supplied `FILEIO.C` `cpyback()` opens two files; a success
+  message from `fssave()` only verifies the newly written main file.
+  The backup's correctness is not checked byte-for-byte after writing.
+
+**Safety decision:** No more WRITE, ERA, SAVE, or FileEdit update tests
+on this volume until the user's disk data can be preserved. Keep the
+working `main` branch and the OVL99 integration branch separate. Do not
+patch the runtime or disk writer on a guess.
+
+Next useful evidence, ideally from a disk image or read-only sector
+inspector rather than a command that rewrites filesystem metadata:
+file directory starting block, its BAT successor(s) for each of the
+four files, and the first/last 512-byte sectors of each. For 6144-byte
+files the chain should have two distinct blocks and terminate at EOF;
+two directory entries should not point into the same allocated chain
+unless hard linking is an explicitly supported filesystem feature.
+
+If no read-only image/inspector exists, test a known-good file under
+a clean boot with the old FileEdit binary or without FileEdit at all
+and capture when repetition begins. Stop at the first interrupt.
