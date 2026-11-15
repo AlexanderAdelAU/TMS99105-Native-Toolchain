@@ -24,11 +24,6 @@ R1      EQU     1
         INCL    "OVLADDR.INC"
 
         EXT     OVLMGR
-        EXT     OVLMGR_INIT
-
-ovlinit:
-        CALL    @OVLMGR_INIT
-        RET
 
 runword:
         LI      R1,OVL_WORD
@@ -66,7 +61,6 @@ runpaste:
         CALL    @O_PASTE
         RET
 
-        ENT     ovlinit
         ENT     runword
         ENT     runchar
         ENT     runrpt
