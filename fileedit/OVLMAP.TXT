@@ -8,3 +8,4 @@ OVL_RPT         4        RPT      report ovprobec
 OVL_VIEW        5        VIEW     viewfile
 OVL_EDIT        6        EDIT     editstep
 OVL_PASTE       7        PASTE    pasteedit
+OVL_NAMEIO      8        NAMEIO   nmprompt
