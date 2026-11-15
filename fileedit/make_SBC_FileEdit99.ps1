@@ -143,7 +143,14 @@ function Compile-Mod($Name) {
 
 function Assemble($Name) {
     Write-Output "`n--- assemble $Name ---"
-    $o = & .\r99.exe $Name SCHCLC 2>&1 | Out-String
+    $asm = Join-Path (Get-Location).Path "$Name.A99"
+    if(-not (Test-Path -LiteralPath $asm -PathType Leaf)) {
+        Write-Output ("Assembler input absent: " + $asm)
+        Write-Output ("Build A99 files: " + ((Get-ChildItem -Filter "*.A99" | ForEach-Object { $_.Name }) -join ", "))
+        throw "compiled/handwritten assembly input missing: $Name"
+    }
+    Write-Output ("  input: " + $asm)
+    $o = & .\r99.exe $Name SCHC 2>&1 | Out-String
     Write-Output $o
     if($o -notmatch "No error\(s\)") {
         throw "assemble failed: $Name"
