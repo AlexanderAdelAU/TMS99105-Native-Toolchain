@@ -186,12 +186,12 @@ foreach($d in $Desc) {
 
 # FILESTAT owns the IOLIB startup.  Every other C file is a module.
 Compile-Main "FILESTAT"
-foreach($m in (@("FILEIO","FILEDATA","TERMIO","NAMEIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU") + @($Overlays | ForEach-Object { $_.Name }))) {
+foreach($m in (@("FILEIO","FILEDATA","TERMIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU") + @($Overlays | ForEach-Object { $_.Name }))) {
     Compile-Mod $m
 }
 
 # Assemble the generated A99 modules.
-foreach($m in (@("FILESTAT","FILEIO","FILEDATA","TERMIO","NAMEIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU") + @($Overlays | ForEach-Object { $_.Name }))) {
+foreach($m in (@("FILESTAT","FILEIO","FILEDATA","TERMIO","EDITBUF","VIEWCTL","EDITCTL","EDITMENU") + @($Overlays | ForEach-Object { $_.Name }))) {
     Assemble $m
 }
 # Hand-written resident assembly services.
@@ -256,7 +256,7 @@ foreach($o in $Overlays) {
 
 Write-Output "`n--- resident chain lint ---"
 $ResidentObjects = @(
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99"
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99"
 )
 $rLint = & .\drel.exe -c @ResidentObjects 2>&1 | Out-String
 Write-Output $rLint
@@ -266,7 +266,7 @@ if($LASTEXITCODE -ne 0 -or $rLint -notmatch "all chains conform") {
 
 $LinkArgs = @(
     "-O1000","-M","-S","FILEEDIT.EXE",
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","NAMEIO.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99",
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99",
     "CALL.R99","IOCORE.R99","IOOPEN.R99","IOREAD.R99","IOWRITE.R99","CBDOS.R99"
 )
 $LinkArgs += $PageArgs
