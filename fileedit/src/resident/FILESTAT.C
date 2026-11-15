@@ -16,9 +16,9 @@ extern fsopen();
 extern fsclose();
 extern fsrewind();
 extern fslist();
-extern runword();
-extern runchar();
-extern runrpt();
+extern wordscan();
+extern charscan();
+extern report();
 extern viewctl();
 extern editmenu();
 extern ebload();
@@ -103,12 +103,12 @@ char **argv;
     if(fsopen() == 0)
         return;
 
-    runword();
+    wordscan();
 
     if(fsrewind() == 0)
         return;
 
-    runchar();
+    charscan();
     fsclose();
-    runrpt();
+    report();
 }
