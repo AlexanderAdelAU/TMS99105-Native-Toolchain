@@ -354,3 +354,22 @@ Investigate independently under the shell project:
 
 Leave OVL99 unchanged and unmerged. Do not ask the user to delete
 backups or rerun FileEdit to reproduce this particular fault.
+
+
+## Additional standalone shell result: LARGE.TXT succeeds repeatedly
+
+User reports that `TYPE LARGE.TXT` has subsequently completed
+successfully **four times**, displaying through line 0220 of the
+banked-buffer regression text. The screenshot shows the final
+lines 0199–0220 and the user confirms four successful runs.
+
+This **falsifies a deterministic first-sector, sustained-output-length
+or >300-byte threshold explanation** for the earlier crash.
+The standalone shell failures are intermittent based on current
+evidence. The source-level R3 swap/pagination concern is separate
+and has not been demonstrated to cause INT2.
+
+Do not change TYPE, BDOS, OVL99 or LINK99 on the assumption that
+large output consistently fails. Continue the original OVL99 hardware
+validation with a read-only LARGE.TXT FileEdit editor test after a
+clean shell run, noting that intermittent faults may still recur.
