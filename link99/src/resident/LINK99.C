@@ -282,7 +282,7 @@ char symbol[MAXSYM+1];
 
 main(argc,argv) int argc, argv[]; {
   ovlinit();                     /* same overlay startup used by FILEEDIT/FILESTAT */
-  puts("SBC LINK99 native linker");
+  puts2("SBC LINK99 native linker", "");
   getsw(argc, argv);		/* fetch and remember switches */
   getmem();			/* acquire maximum memory buffer */
   phase1(argc, argv);		/* load and link */
@@ -823,7 +823,7 @@ show(table, type) char *table, *type; {
   itox(abs + cbase, str, 6);
   fputs( str, stdout); fputs(" ", stdout);
   fputs(type, stdout); fputs(" ", stdout);
-  puts(table + SYM);
+  puts2(table + SYM, "");
   }
 
 /*
@@ -987,20 +987,26 @@ int value;
     *(p + 1) = value;
 }
 
+/*
+** puts2 - print a and b as one complete console line.
+**
+** This IOLIB's puts() writes no newline, and its putc() turns a CR
+** into CR+LF.  Every message the linker prints is a whole line, so
+** puts2 ends it with a CR; without that the messages ran together and
+** the shell prompt landed on the end of the last one.
+*/
 puts2(a, b)
 char *a, *b;
 {
-    puts(a);
-    puts(b);
+    status(a, b);
 }
 
 /*
-** status - print a and b as ONE console line, so the user can see the
-** linker is making progress.  The line is built in the global stline[]
-** and written with a single puts(), so it ends correctly whichever
-** puts() newline convention the linked I/O library has.  It is a global
-** buffer rather than a local array because of the frame placement
-** problem described in phase1().
+** status - print a and b as ONE console line, ended by a CR, which this
+** IOLIB's putc() writes as CR+LF.  The line is built in the global
+** stline[] and written with a single puts().  It is a global buffer
+** rather than a local array because of the frame placement problem
+** described in phase1().
 */
 status(a, b)
 char *a, *b;
@@ -1009,6 +1015,7 @@ char *a, *b;
     p = stline;
     while(*a && p < stline + 46) *p++ = *a++;
     while(*b && p < stline + 46) *p++ = *b++;
+    *p++ = 13;			/* CR: putc() adds the LF */
     *p = 0;
     puts(stline);
 }
@@ -1016,15 +1023,14 @@ char *a, *b;
 error(s)
 char *s;
 {
-    puts(s);
+    puts2(s, "");
     exit(1);
 }
 
 error2(a, b)
 char *a, *b;
 {
-    puts(a);
-    puts(b);
+    puts2(a, b);
     exit(1);
 }
 
