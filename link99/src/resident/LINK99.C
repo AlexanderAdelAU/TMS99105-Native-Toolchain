@@ -263,7 +263,6 @@ unsigned ucl, ucd;
 int xrefs;      /* an EXT "XREFS" marker has been seen           */
 int xrsym;      /* the xr entry the following CHAIN items feed    */
 int cbank;      /* currently mapped code-image bank, or -1         */
-char stline[48];  /* one console status line, built by status()   */
 
 
 /*
@@ -1002,22 +1001,15 @@ char *a, *b;
 }
 
 /*
-** status - print a and b as ONE console line, ended by a CR, which this
-** IOLIB's putc() writes as CR+LF.  The line is built in the global
-** stline[] and written with a single puts().  It is a global buffer
-** rather than a local array because of the frame placement problem
-** described in phase1().
+** status - print a then b as ONE console line, ended by a CR, which
+** this IOLIB's putc() writes as CR+LF.  No buffer, so no length limit.
 */
 status(a, b)
 char *a, *b;
 {
-    char *p;
-    p = stline;
-    while(*a && p < stline + 46) *p++ = *a++;
-    while(*b && p < stline + 46) *p++ = *b++;
-    *p++ = 13;			/* CR: putc() adds the LF */
-    *p = 0;
-    puts(stline);
+    puts(a);
+    puts(b);
+    putchar(13);		/* CR: putc() adds the LF */
 }
 
 error(s)
