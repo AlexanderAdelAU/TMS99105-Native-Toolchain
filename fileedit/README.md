@@ -223,8 +223,9 @@ are unsafe.
 This is **transparent calling**, not automatic function placement.
 
 LINK99 defines each published name as a **resident thunk** and renames
-the overlay's own copy, so normal C calls link to the thunks. The build verifies LINK99's reported
-external references are to resident addresses, runs DREL chain checks,
+the overlay's own copy, so normal C calls link to the thunks. The build
+verifies LINK99's reported external references are to resident
+addresses, runs DREL chain checks,
 and fails when a mapped code module exceeds the current one-page safe
 budget (**4,032 bytes of a 4,096-byte page**).
 
