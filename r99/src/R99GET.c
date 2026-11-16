@@ -597,8 +597,8 @@ flushlin()
 
 /*
  Get the next source character from IOLIB99.  getc() buffers the unit
- itself and delivers every line ending as '\n' (CR in this dialect).
- Returns 0 at end of file: the library's -1, or a ^Z (XMODEM pads the
+ itself and normalizes every accepted text line ending to logical '\n'
+ (LF, 0x0A). Returns 0 at end of file: the library's -1, or a ^Z (XMODEM pads the
  last block with them).  The high bit is stripped as it always was.
  */
 movchr(dest)
@@ -610,22 +610,16 @@ char *dest;
 	return ((*dest = c & 0x7f) == CPMEOF) ? 0 : 1;
 }
 
-seek(fd, i, j)
-int fd;
-int i;
-int j;
-{
-	if (fclose(fd) == 0)
-		wipeout("\nError closing source.\n");
-
-	if ((sorbuf.fd = fopen(srcname, "r")) == 0)
-		wipeout("\nCan't reopen source.\n");
-}
 /*
  Function to rewind the source file.
- */
 
+ The historical port implemented this by closing and reopening the source.
+ That coupled the assembler to the old non-standard fclose() return contract
+ and needlessly discarded I/O state.  IOLIB99 now provides lseek(), so keep
+ the source unit open and reposition it directly.
+ */
 source_rewind() {
 	close_includes();
-	seek(sorbuf.fd, 0, 0);
+	if (lseek(sorbuf.fd, 0, 0) < 0) /* SEEK_SET */
+		wipeout("\nCan't rewind source.\n");
 }

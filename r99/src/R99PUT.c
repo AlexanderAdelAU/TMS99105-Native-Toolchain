@@ -267,7 +267,9 @@ struct diskbuf *dskbuf;
 		*(dskbuf->pointr)++ = 0;
 	if (write(dskbuf->fd, dskbuf->space, t) == -1)
 		wipeout("\nDisk write error in hexflush.\n");
-	if (fclose(dskbuf->fd) == 0)
+	t = fclose(dskbuf->fd);
+	dskbuf->fd = NOFILE;
+	if (t != 0)
 		wipeout("\nError closing file.\n");
 }
 
@@ -288,7 +290,9 @@ struct diskbuf *dskbuf;
 //	if ((t=fwrite(dskbuf->space,sz,t,dskbuf->fp)) <= 0 ) wipeout("\nDisk write error in rflush.\n");
 	if (write(dskbuf->fd, dskbuf->space, t) == -1)
 		wipeout("\nDisk write error in rflush.\n");
-	if (fclose(dskbuf->fd) == 0)
+	t = fclose(dskbuf->fd);
+	dskbuf->fd = NOFILE;
+	if (t != 0)
 		wipeout("\nError closing file.\n");
 }
 

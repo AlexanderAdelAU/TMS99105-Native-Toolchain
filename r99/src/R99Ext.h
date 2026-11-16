@@ -66,7 +66,7 @@ extern bbsearch();
 extern numopcs();
 extern numoprs();
 extern movchr();
-extern seek();
+extern lseek();
 extern flushlin();
 extern puts2();
 extern puts3();

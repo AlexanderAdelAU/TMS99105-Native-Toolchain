@@ -65,7 +65,7 @@
 
 #define	ALPHA	0	/*  Alphabetic character.			*/
 #define	NUMERIC	1	/*  Numeric digit (0-9).			*/
-#define	END_LIN	2	/*  End-of-Line marker (cr or ;).		*/
+#define	END_LIN	2	/*  End-of-line marker (logical newline or ;).	*/
 #define	COMMA	3	/*  Field separator (,).			*/
 #define	OPERATR	4	/*  Operator (* - GE < ( SHR etc.).		*/
 #define	BAS_DES	5	/*  Base designator ($ % @).			*/
