@@ -5,7 +5,7 @@ Set-StrictMode -Version 2.0
 #   The project tree is authoritative.
 #   build\ is disposable.
 #   ALL tools, libraries, sources and includes are copied into build\ first.
-#   Compilation, assembly, DREL and LINK99 then run only inside build\.
+#   Compilation, assembly and LINK99 then run only inside build\.
 #
 # This makes the script independent of Eclipse's current working directory.
 
@@ -63,7 +63,7 @@ foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$TestsDir)) {
 if(-not $SkipMonitor) { Need-Dir $MonitorDir }
 Need-File $OverlayMap
 
-$RequiredTools = @("smallcp.exe","r99.exe","drel.exe","link99.exe")
+$RequiredTools = @("smallcp.exe","r99.exe","link99.exe")   # drel is not needed to build
 foreach($f in $RequiredTools) {
     Need-File (Join-Path $ToolsDir $f)
 }
@@ -207,48 +207,8 @@ foreach($m in (@("FILESTAT","FILEIO","FILEDATA","TERMIO","EDITBUF","VIEWCTL","ED
 Assemble "CONRX"
 Assemble "EBMAP"
 
-Write-Output "`n--- DREL overlay chain lint ---"
-$lint = & .\drel.exe -c @OvlFiles 2>&1 | Out-String
-Write-Output $lint
-if($LASTEXITCODE -ne 0 -or $lint -notmatch "all chains conform") {
-    throw "overlay chain lint failed"
-}
-
 Assemble "OVLMGR"
 Assemble "OVCALL"
-
-Write-Output "`n--- overlay page budgets ---"
-foreach($o in $Overlays) {
-    $pattern = "MODULE\s+" + [regex]::Escape($o.Name) + "\s+size=([0-9A-F]+)"
-    $match = [regex]::Match(
-        $lint,
-        $pattern,
-        [Text.RegularExpressions.RegexOptions]::IgnoreCase
-    )
-
-    if(-not $match.Success) {
-        throw "no DREL size for $($o.Name)"
-    }
-
-    $used = [Convert]::ToInt32($match.Groups[1].Value,16)
-    $free = 0x0FC0 - $used
-
-    Write-Output ("  {0,-8} used {1,4}  chain-free {2,4}" -f $o.Name,$used,$free)
-
-    if($free -lt 0) {
-        throw "$($o.Name) exceeds one-page chain-safe limit >0FC0"
-    }
-}
-
-Write-Output "`n--- resident chain lint ---"
-$ResidentObjects = @(
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99"
-)
-$rLint = & .\drel.exe -c @ResidentObjects 2>&1 | Out-String
-Write-Output $rLint
-if($LASTEXITCODE -ne 0 -or $rLint -notmatch "all chains conform") {
-    throw "resident chain lint failed"
-}
 
 $LinkArgs = @(
     "-O1000","-M","-S","-YOVLMAP.TXT","FILEEDIT.EXE",
@@ -265,16 +225,6 @@ Test-KnownIOLibSet $BuildDir "PRE-LINK IOLIB CHECK"
 Write-Output "`n--- LINK99 ---"
 Write-Output (".\link99.exe " + ($LinkArgs -join " "))
 
-Write-Output "`n--- DREL LIBRARY CHECK ---"
-Write-Output "Checking IOLIB99.LIB..."
-$drelIo = & .\drel.exe IOLIB99.LIB 2>&1 | Out-String
-Write-Output $drelIo
-
-Write-Output "Checking CLIB99.LIB..."
-$drelC = & .\drel.exe CLIB99.LIB 2>&1 | Out-String
-Write-Output $drelC
-
-
 $linkOut = & .\link99.exe @LinkArgs 2>&1 | Out-String
 Write-Output $linkOut
 
@@ -285,7 +235,26 @@ if($LASTEXITCODE -ne 0 -or
     throw "LINK99 failed"
 }
 if($linkOut -notmatch '(?m)^OVL99 overlay map') {
-    throw "LINK99 did not read the overlay map: tools\link99.exe must be 3.10.0 or later (-Y)"
+    throw "LINK99 did not read the overlay map: tools\link99.exe must be 3.10.1 or later (-Y)"
+}
+
+# Page budgets, from LINK99's -M listing ("N Code Bytes at ... MODULE",
+# the module's PSIZE - the size DREL used to report).  LINK99 itself
+# rejects a module that overruns its 4K page and checks every object's
+# reference slots; the >0FC0 budget keeps the margin FileEdit has always kept.
+Write-Output "`n--- overlay page budgets ---"
+foreach($o in $Overlays) {
+    $pattern = '(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+' + [regex]::Escape($o.Name) + '\s*$'
+    $match = [regex]::Match($linkOut, $pattern)
+    if(-not $match.Success) {
+        throw "LINK99 listed no size for $($o.Name)"
+    }
+    $used = [Convert]::ToInt32($match.Groups[1].Value,16)
+    $free = 0x0FC0 - $used
+    Write-Output ("  {0,-10} used {1,4}  free {2,4}" -f $o.Name,$used,$free)
+    if($free -lt 0) {
+        throw "$($o.Name) exceeds the one-page >0FC0 budget"
+    }
 }
 
 # Verify every externally referenced published entry bound to its resident

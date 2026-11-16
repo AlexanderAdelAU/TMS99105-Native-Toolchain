@@ -101,7 +101,8 @@ Calls such as `viewfile()` and `editstep()` go through those thunks and
 a 16-frame stack for nested overlay calls, and the linker's map checks
 prevent code overlays from overwriting the data banks.
 
-DREL lints relocation chains and checks one-page overlay size limits.
+LINK99 checks every object's external-reference slots, and the build checks
+one-page overlay size limits from the link listing. DREL is not part of the build.
 The build checks that published overlay functions resolve to resident
 thunks rather than directly to virtual overlay addresses.
 
@@ -225,8 +226,7 @@ This is **transparent calling**, not automatic function placement.
 LINK99 defines each published name as a **resident thunk** and renames
 the overlay's own copy, so normal C calls link to the thunks. The build
 verifies LINK99's reported external references are to resident
-addresses, runs DREL chain checks,
-and fails when a mapped code module exceeds the current one-page safe
+addresses, and fails when a mapped code module exceeds the current one-page safe
 budget (**4,032 bytes of a 4,096-byte page**).
 
 There are still **manual module/page choices** in `OVLMAP.TXT`.
