@@ -202,7 +202,10 @@ putls("%\n");
 		putchr(CPMEOF, &lstbuf);
 	}
 	flush(&lstbuf);
-	fclose(sorbuf.fd);
+	if (sorbuf.fd > 0) {
+		fclose(sorbuf.fd);
+		sorbuf.fd = NOFILE;
+	}
 	//wipeout("\r");
 }
 
@@ -309,13 +312,16 @@ int *argv;
 	strcpy(srcname, sorfname);
 	if ((sorbuf.fd = fopen(sorfname, "r")) == 0)
 		wipeout("\nCan't open source.\n");
-	source_rewind();
+
+	/*  fopen() leaves a newly opened source at byte zero.  Do not close and
+	    reopen it merely to rewind; source_rewind() is needed only between
+	    assembler passes and now uses lseek(). */
 
 	/*  Open the object LAST, so a source that will not open cannot
 	    leave an empty .R99 behind.  */
 	if (noobj == 0) {
 		strcpy(objname, hexfname);	/*  wipeout() removes it on abort  */
-		if ((hexbuf.fd = fopen(hexfname, "w")) == 0)
+		if ((hexbuf.fd = fopen(hexfname, "wb")) == 0)
 			wipeout("\nCan't open R99 file.\n");
 	}
 

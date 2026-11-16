@@ -180,7 +180,7 @@ char *reason;
 {
     putls(reason);
 
-    if (hexbuf.fd) {
+    if (hexbuf.fd > 0) {
         fclose(hexbuf.fd);
         hexbuf.fd = 0;
         if (objname[0])

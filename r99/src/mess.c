@@ -2,7 +2,7 @@
 ** mess.c -- message functions
 */
 
-/* Print a literal string without carriage return to console */
+/* Print a literal string without adding a newline. */
 putls(str)
 char *str;
 {
