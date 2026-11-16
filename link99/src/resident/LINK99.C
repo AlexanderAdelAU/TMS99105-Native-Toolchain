@@ -263,6 +263,7 @@ unsigned ucl, ucd;
 int xrefs;      /* an EXT "XREFS" marker has been seen           */
 int xrsym;      /* the xr entry the following CHAIN items feed    */
 int cbank;      /* currently mapped code-image bank, or -1         */
+char stline[48];  /* one console status line, built by status()   */
 
 
 /*
@@ -281,7 +282,7 @@ char symbol[MAXSYM+1];
 
 main(argc,argv) int argc, argv[]; {
   ovlinit();                     /* same overlay startup used by FILEEDIT/FILESTAT */
-  puts("SBC LINK99");
+  puts("SBC LINK99 native linker");
   getsw(argc, argv);		/* fetch and remember switches */
   getmem();			/* acquire maximum memory buffer */
   phase1(argc, argv);		/* load and link */
@@ -642,8 +643,12 @@ phase1(argc, argv) int argc, *argv; {
       if(!crfd) error2("- cannot open ", crfn);		/* open reference file */
       auxbuf(crfd, AUXBUF);	/* extra buffering lowers head movement */
       }
-    if(lib) search();	/* search library if unresolved ext refs */
+    if(lib) {			/* search library if unresolved ext refs */
+      status("Search ", infn);
+      search();
+      }
     else {
+      status("Load   ", infn);
       inrel = open(infn, "r");
       if(!inrel) error2(infn, " - cannot open");
       ifilelbuf();                 /* new REL file: discard GETREL byte buffer */
@@ -684,8 +689,8 @@ phase1(argc, argv) int argc, *argv; {
   close(crfd);
   crfd = open(crfn, "r");
   if(!crfd) error2("- cannot reopen ", crfn);
-  itox(csize, sz, 8); puts2(sz, " Bytes (hex)");
-  itou(csize, sz, 8); puts2(sz, " Bytes (dec)");
+  itox(csize, sz, 8); status(sz, " Bytes (hex)");
+  itou(csize, sz, 8); status(sz, " Bytes (dec)");
   /*
    * The LAST statement of phase1.  If [end1] prints and [p1] does not,
    * the crash is in the RET itself - XOP 7 taking a corrupted return
@@ -987,6 +992,25 @@ char *a, *b;
 {
     puts(a);
     puts(b);
+}
+
+/*
+** status - print a and b as ONE console line, so the user can see the
+** linker is making progress.  The line is built in the global stline[]
+** and written with a single puts(), so it ends correctly whichever
+** puts() newline convention the linked I/O library has.  It is a global
+** buffer rather than a local array because of the frame placement
+** problem described in phase1().
+*/
+status(a, b)
+char *a, *b;
+{
+    char *p;
+    p = stline;
+    while(*a && p < stline + 46) *p++ = *a++;
+    while(*b && p < stline + 46) *p++ = *b++;
+    *p = 0;
+    puts(stline);
 }
 
 error(s)

@@ -22,6 +22,7 @@ extern puts2();
 extern show();
 extern poll();
 extern error2();
+extern status();
 extern codegetb();
 extern codegetw();
 
@@ -41,7 +42,9 @@ char outbuf[520];
 final()
 {
   if(!okay()) return 0;
+  status("Write  ", outfn);
   phase2();
+  status("Done   ", outfn);
   return 1;
 }
 
