@@ -56,7 +56,7 @@ okay()
   err = eplast = 0;
   xrnext = getint(xrfirst);
   epnext = getint(epfirst);
-  if(list) puts("\nEntry Points:");
+  if(list) puts2("Entry Points:", "");
 
   while(1) {
     poll(1);
