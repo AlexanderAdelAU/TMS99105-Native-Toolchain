@@ -13,7 +13,13 @@ $LibDir      = Join-Path $ProjectRoot "lib"
 $SrcResident = Join-Path $ProjectRoot "src\resident"
 $SrcOverlay  = Join-Path $ProjectRoot "src\overlays"
 $IncludeDir  = Join-Path $ProjectRoot "include"
+# Shared REL headers and GETREL.C.  A development tree keeps them in a sibling
+# ..\CommonLibrary; this repository ships the same files as .\common.  Use the
+# sibling when it exists, otherwise the bundled copy.
 $CommonRoot  = Join-Path $ProjectRoot "..\CommonLibrary"
+if(-not (Test-Path -LiteralPath $CommonRoot -PathType Container)) {
+    $CommonRoot = Join-Path $ProjectRoot "common"
+}
 $CommonIncDir= Join-Path $CommonRoot "Includes"
 $Rel99SrcDir = Join-Path $CommonRoot "rel99"
 $BuildDir    = Join-Path $ProjectRoot "build"
@@ -31,7 +37,9 @@ function Need-Dir($Path) {
     }
 }
 
-foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$IncludeDir,$CommonRoot,$CommonIncDir,$Rel99SrcDir,$MonitorDir)) {
+# The MONITOR folder is only the deploy target, so it is not required here;
+# step 9 copies to it when it exists.
+foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$IncludeDir,$CommonRoot,$CommonIncDir,$Rel99SrcDir)) {
     Need-Dir $d
 }
 foreach($f in @("smallcp.exe","r99.exe","drel.exe","link99.exe")) {
@@ -295,7 +303,12 @@ Need-File ".\SBC99.EXE"
 Write-Output "`n--- 9. create SBC deliverable ---"
 Copy-Item -LiteralPath ".\SBC99.EXE" -Destination (Join-Path $DistDir "LINK99.EXE") -Force
 $MonitorExe = Join-Path $MonitorDir "LINK99.EXE"
-Copy-Item -LiteralPath ".\SBC99.EXE" -Destination $MonitorExe -Force
+if(Test-Path -LiteralPath $MonitorDir -PathType Container) {
+    Copy-Item -LiteralPath ".\SBC99.EXE" -Destination $MonitorExe -Force
+    $Deployed = $MonitorExe
+} else {
+    $Deployed = "not deployed: no MONITOR folder at $MonitorDir"
+}
 
 Write-Output ""
 Write-Output "LINK99 FileEdit-style overlay build complete."
@@ -303,7 +316,7 @@ Write-Output "OVL_USAGE: ID 1, virtual segment 8, physical page 2"
 Write-Output "CODEBANKS: pages 3..12 mapped through segment 8"
 Write-Output "SYMBOLS:   pages 13..15 mapped through segments 9..11"
 Write-Output "Deliverable: .\dist\LINK99.EXE"
-Write-Output ("Deployed: " + $MonitorExe)
+Write-Output ("Deployed: " + $Deployed)
 Write-Output "All intermediate/generated files remain in build\ for inspection."
 
 Set-Location -LiteralPath $ProjectRoot
