@@ -27,13 +27,16 @@ RULES
       IDs 2-11   OVL_CODE0..9     Data         segment 8, pages 3-12
       ID 12      SYMBOLS          Data         segments 9-11, pages 13-15
 
-   OVL_CODE0..9 have assembler anchor symbols only so DREL can build/page the
-   banks. Those anchors do not make the banks callable code overlays.
+   All three are declared in OVLMAP.TXT, read by the host link99 -Y when this
+   linker is built.  The banks publish no entries, so nothing can call them.
+   SYMBOLS is declared "guest SYM": link99 fails the link if it ever maps
+   segment 8.
 
-5. When adding a new overlay, declare its Kind in make_SBC_link99.ps1. The
-   build parses OVLTABLE.INC one row at a time and fails if an Executable
-   overlay does not begin with segment 8. Non-segment-8 exceptions must remain
-   explicitly data-only.
+5. When adding a new overlay, add it to OVLMAP.TXT.  link99 fails the link if
+   a non-guest overlay does not map segment 8 first and exactly once, or if a
+   guest maps it.  The build then checks every row against what this linker
+   expects and checks that include\OVLDEFS.INC gives each overlay the ID
+   link99 assigned (IDs follow first appearance in the map).
 
 6. Do not bypass ovlinit/OVLMGR_INIT. Startup ownership is explicit by design.
 

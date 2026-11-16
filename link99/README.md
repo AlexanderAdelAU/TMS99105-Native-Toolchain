@@ -19,7 +19,7 @@ common/rel99/       canonical GETREL/PUTREL/SEEREL sources
 common/cfunctions/  shared Small-C helpers
 reference/           historical/reference implementations
 lib/                 target runtime libraries used to build LINK99
- tools/               Windows-hosted compiler/assembler/DREL/linker
+ tools/               Windows-hosted compiler/assembler/linker (link99 3.10.1 or later)
  tests/               repeatable test inputs and expected results
  docs/                architecture and milestone notes
  build/               disposable staged build directory
@@ -34,7 +34,7 @@ From PowerShell:
 .\make_SBC_link99.ps1
 ```
 
-The script deletes and recreates `build/` and `dist/`, stages the host tools and target libraries into `build/`, compiles and assembles the target sources, then invokes the current Windows linker as **`HOSTLINK99.EXE`**. The rename is intentional: on Windows the host `link99.exe` and target `LINK99.EXE` cannot safely coexist under different case alone.
+The script deletes and recreates `build/` and `dist/`, stages the host tools and target libraries into `build/`, compiles and assembles the target sources, then links with the Windows `link99 -YOVLMAP.TXT`. The host linker builds the overlay table and the `runusage` thunk from [`OVLMAP.TXT`](OVLMAP.TXT); the build checks the table it built and that `include/OVLDEFS.INC` agrees with its IDs. The image is linked as `SBC99.EXE` and delivered as `dist\LINK99.EXE`, because the host `link99.exe` and the target `LINK99.EXE` cannot coexist in one folder on Windows. It is also copied to the nearest `TMS99105_SBC\MONITOR` above the project.
 
 Successful Step 0 output:
 

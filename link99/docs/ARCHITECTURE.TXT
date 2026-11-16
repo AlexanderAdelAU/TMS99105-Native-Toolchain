@@ -87,6 +87,7 @@ executable overlay must own segment 8. A mapping that does not own segment 8
 is data-only and must never be entered as code.
 
 OVLMGR_INIT is mandatory before the first mapping and explicitly resets
-CUR_WINA_ID as well as the per-segment page/ID caches. The build script parses
-the generated overlay table and rejects executable overlays that violate the
-segment-8 ownership rule. See OVERLAY_OWNERSHIP_CONTRACT.TXT.
+CUR_WINA_ID as well as the per-segment page/ID caches. The host link99 -Y
+builds the overlay table from OVLMAP.TXT and rejects overlays that violate the
+segment-8 ownership rule; the build checks the rows and IDs it built. See
+OVERLAY_OWNERSHIP_CONTRACT.TXT.

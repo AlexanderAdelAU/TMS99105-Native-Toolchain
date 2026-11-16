@@ -1,11 +1,11 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 
-# SBC LINK99 build using the same overlay construction used by FILEEDIT/FILESTAT:
+# SBC LINK99 build:
 #   project tree is authoritative; build\ is disposable;
-#   compile overlay modules first, DREL generates OVLADDR/OVLTABLE;
-#   only then assemble the resident OVLMGR + application OVLAPI;
-#   resident objects precede -P<n> overlay objects in the final link.
+#   the host link99 (3.10.1 or later) reads OVLMAP.TXT (-Y): it places the
+#   overlay and bank modules on their pages and builds OVL_TABLE and the
+#   resident runusage thunk.  No DREL step and no generated include file.
 
 $ProjectRoot = $PSScriptRoot
 $ToolsDir    = Join-Path $ProjectRoot "tools"
@@ -24,7 +24,22 @@ $CommonIncDir= Join-Path $CommonRoot "Includes"
 $Rel99SrcDir = Join-Path $CommonRoot "rel99"
 $BuildDir    = Join-Path $ProjectRoot "build"
 $DistDir     = Join-Path $ProjectRoot "dist"
-$MonitorDir  = Join-Path $ProjectRoot "..\..\TMS99105_SBC\MONITOR"
+$OverlayMap  = Join-Path $ProjectRoot "OVLMAP.TXT"
+# Deploy target: the nearest TMS99105_SBC\MONITOR in a folder above this one
+# (works from <workspace>\TMS9900 _C\SBC_Link99 and from a git clone at
+# <workspace>\GIT\TMS99105-Native-Toolchain\link99).  SBC_MONITOR_DIR overrides.
+$MonitorDir = $env:SBC_MONITOR_DIR
+if(-not $MonitorDir) {
+    $up = Split-Path -Parent $ProjectRoot
+    while($up) {
+        $c = Join-Path $up "TMS99105_SBC\MONITOR"
+        if(Test-Path -LiteralPath $c -PathType Container) { $MonitorDir = $c; break }
+        $next = Split-Path -Parent $up
+        if(-not $next -or $next -eq $up) { break }
+        $up = $next
+    }
+}
+if(-not $MonitorDir) { $MonitorDir = Join-Path $ProjectRoot "..\..\TMS99105_SBC\MONITOR" }
 
 function Need-File($Path) {
     if(-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
@@ -42,7 +57,7 @@ function Need-Dir($Path) {
 foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$IncludeDir,$CommonRoot,$CommonIncDir,$Rel99SrcDir)) {
     Need-Dir $d
 }
-foreach($f in @("smallcp.exe","r99.exe","drel.exe","link99.exe")) {
+foreach($f in @("smallcp.exe","r99.exe","link99.exe")) {   # drel is not needed to build
     Need-File (Join-Path $ToolsDir $f)
 }
 foreach($f in @(
@@ -59,6 +74,7 @@ Need-File (Join-Path $SrcOverlay  "OVL_USAGE.C")
 foreach($i in 0..9) { Need-File (Join-Path $SrcOverlay ("OVL_CODE{0}.A99" -f $i)) }
 foreach($f in @("OVL_S9.A99","OVL_S10.A99","OVL_S11.A99")) { Need-File (Join-Path $SrcOverlay $f) }
 Need-File (Join-Path $IncludeDir  "OVLDEFS.INC")
+Need-File $OverlayMap
 Need-File (Join-Path $Rel99SrcDir "GETREL.C")
 
 Write-Output "`n--- 1. clear build/dist folders ---"
@@ -76,6 +92,7 @@ Copy-Item -Path (Join-Path $SrcResident "*") -Destination $BuildDir -Force
 Copy-Item -Path (Join-Path $SrcOverlay  "*") -Destination $BuildDir -Force
 # Only GETREL is part of native LINK99; do not stage unrelated PUTREL/SEEREL programs.
 Copy-Item -LiteralPath (Join-Path $Rel99SrcDir "GETREL.C") -Destination $BuildDir -Force
+Copy-Item -LiteralPath $OverlayMap -Destination $BuildDir -Force
 
 Set-Location -LiteralPath $BuildDir
 
@@ -101,15 +118,15 @@ function Assemble($Name) {
     Need-File (Join-Path $BuildDir ($Name + ".R99"))
 }
 
-# Overlay descriptors carry an explicit Kind. Executable entries are callable
-# code and must own segment 8; Data entries are mapped storage only and must
-# never be entered as code. Keep this classification explicit when adding IDs.
-$Overlays = @()
-$Overlays += @{ Name="OVL_USAGE"; Page=2; Segment=8; Id=1; Anchor="O_USAGE"; Kind="Executable"; Desc="OVL_USAGE.R99=2,1,OVL_USAGE_ENTRY:O_USAGE" }
-foreach($i in 0..9) {
-    $pg = 3 + $i
-    $id = 2 + $i
-    $Overlays += @{ Name=("OVL_CODE{0}" -f $i); Page=$pg; Segment=8; Id=$id; Anchor=("O_C{0}" -f $i); Kind="Data"; Desc=("OVL_CODE{0}.R99={1},{2},C{0}:O_C{0}" -f $i,$pg,$id) }
+# The overlay and bank modules, in map order.  Pages, IDs and the table
+# come from link99 -Y; the build only needs the names.
+$OvlFiles = @()
+foreach($raw in (Get-Content -LiteralPath $OverlayMap)) {
+    $line = ($raw -replace '#.*$','').Trim()
+    if($line -eq '') { continue }
+    $f = @($line -split '[ \t]+')
+    if(@('window','guest') -contains $f[0].ToLowerInvariant()) { continue }
+    $OvlFiles += "$($f[0]).R99"
 }
 
 Write-Output "`n--- 3. compile resident + overlay C ---"
@@ -118,8 +135,6 @@ Compile-Mod  "GETREL"
 Compile-Mod  "FINAL"
 Compile-Mod  "OVL_USAGE"
 
-# Assemble generated C output first. OVLMGR/OVLAPI must wait until DREL has
-# generated OVLADDR.INC and OVLTABLE.INC.
 Assemble "LINK99"
 Assemble "GETREL"
 Assemble "FINAL"
@@ -128,95 +143,6 @@ foreach($i in 0..9) { Assemble ("OVL_CODE{0}" -f $i) }
 Assemble "OVL_S9"
 Assemble "OVL_S10"
 Assemble "OVL_S11"
-
-$OvlFiles = @("OVL_USAGE.R99")
-foreach($i in 0..9) { $OvlFiles += ("OVL_CODE{0}.R99" -f $i) }
-
-Write-Output "`n--- 4. DREL overlay chain lint ---"
-$lint = & .\drel.exe -c @OvlFiles 2>&1 | Out-String
-Write-Output $lint
-if($LASTEXITCODE -ne 0 -or $lint -notmatch "all chains conform") {
-    throw "overlay chain lint failed"
-}
-
-$drelArgs = @("-i","OVLADDR.INC")
-foreach($o in $Overlays) { $drelArgs += $o.Desc }
-
-Write-Output "`n--- 5. DREL generated overlay tables ---"
-$gen = & .\drel.exe @drelArgs 2>&1 | Out-String
-Write-Output $gen
-if($LASTEXITCODE -ne 0) { throw "DREL include generation failed" }
-Need-File ".\OVLADDR.INC"
-Need-File ".\OVLTABLE.INC"
-
-# Add LINK99's fixed symbol/XREF workspace row.  DREL generates rows for
-# executable/scratch code banks; this workspace has no callable anchor.
-Add-Content -LiteralPath ".\OVLTABLE.INC" -Value "`tWORD`t9,13,10,14,11,15,0,0,0,0`t;ID 12 SYMBOLS"
-
-Write-Output "`n--- generated OVLADDR.INC ---"
-Get-Content ".\OVLADDR.INC" | Write-Output
-Write-Output "`n--- generated OVLTABLE.INC ---"
-Get-Content ".\OVLTABLE.INC" | Write-Output
-
-$anchors = Get-Content ".\OVLADDR.INC" -Raw
-foreach($o in $Overlays) {
-    $a = $o.Anchor
-    $pat = '(?im)^\s*' + [regex]::Escape($a) + '\s+EQU\s+0?([0-9A-F]{4})H\b'
-    $am = [regex]::Match($anchors,$pat)
-    if(-not $am.Success) { throw "missing or unparsable generated anchor $a" }
-    $av = [Convert]::ToInt32($am.Groups[1].Value,16)
-    if($av -lt 0x8000 -or $av -gt 0xBFFF) {
-        throw ("$a is not in overlay window >8000-BFFF")
-    }
-    Write-Output ("Overlay anchor validated: {0}=>{1:X4}" -f $a,$av)
-}
-
-# Overlay ownership hardening. Parse one generated row at a time; do not use
-# a whole-file multiline regex. The invariant is architectural, not cosmetic:
-# OVLMGR records CUR_WINA_ID when segment 8 is mapped. Therefore any overlay
-# that may be entered as code must explicitly own segment 8. Data-only banks
-# are allowed to be exceptions, but their classification must be deliberate.
-function Read-OvlTableRows($Path) {
-    $rows = @{}
-    foreach($line in (Get-Content -LiteralPath $Path)) {
-        if($line -match '^\s*WORD\s+([^;]+)\s*;\s*(?:unused\s+)?ID\s+(\d+)') {
-            $id = [int]$Matches[2]
-            $vals = @()
-            foreach($tok in ($Matches[1] -split ',')) {
-                $t = $tok.Trim()
-                if($t -notmatch '^\d+$') { throw ("OVLTABLE ID {0} has non-numeric field '{1}'" -f $id,$t) }
-                $vals += [int]$t
-            }
-            if($vals.Count -ne 10) { throw ("OVLTABLE ID {0} must contain exactly 10 words" -f $id) }
-            $rows[$id] = $vals
-        }
-    }
-    return $rows
-}
-
-$rows = Read-OvlTableRows ".\OVLTABLE.INC"
-foreach($o in $Overlays) {
-    $oid = [int]$o.Id
-    if(-not $rows.ContainsKey($oid)) { throw ("OVLTABLE missing ID {0} ({1})" -f $o.Id,$o.Name) }
-    $row = $rows[$oid]
-    if($row[0] -ne [int]$o.Segment -or $row[1] -ne [int]$o.Page) {
-        throw ("OVLTABLE ID {0} ({1}) expected first mapping {2},{3}; got {4},{5}" -f $o.Id,$o.Name,$o.Segment,$o.Page,$row[0],$row[1])
-    }
-    if($o.Kind -eq "Executable" -and $row[0] -ne 8) {
-        throw ("EXECUTABLE overlay ID {0} ({1}) violates ownership rule: first mapped segment must be 8" -f $o.Id,$o.Name)
-    }
-    Write-Output ("Overlay ownership: ID {0,2} {1,-12} {2,-10} first={3},{4}" -f $o.Id,$o.Name,$o.Kind,$row[0],$row[1])
-}
-
-if(-not $rows.ContainsKey(12)) { throw "OVLTABLE missing ID 12 SYMBOLS data workspace" }
-$sym = $rows[12]
-$wantSym = @(9,13,10,14,11,15,0,0,0,0)
-for($i=0; $i -lt 10; $i++) {
-    if($sym[$i] -ne $wantSym[$i]) {
-        throw ("OVLTABLE ID 12 SYMBOLS mismatch at word {0}: got {1}, expected {2}" -f $i,$sym[$i],$wantSym[$i])
-    }
-}
-Write-Output "Overlay ownership: ID 12 SYMBOLS      Data       explicit non-segment-8 exception"
 
 # Startup ownership must be deterministic. The manager owns this state, so its
 # initializer itself must clear CUR_WINA_ID before any overlay/data-bank mapping.
@@ -245,50 +171,23 @@ if($mainPos -lt 0 -or $ovlInitCall -lt 0 -or $getmemCall -lt 0 -or $phase1Call -
 }
 Write-Output "Overlay startup audit: owner reset is explicit and ovlinit() precedes first mapping."
 
-Write-Output "`n--- 6. assemble resident overlay framework ---"
+Write-Output "`n--- 4. assemble resident overlay framework ---"
 Assemble "OVLMGR"
 Assemble "OVLAPI"
 
-Write-Output "`n--- overlay page budget ---"
-foreach($o in $Overlays) {
-    $pat = 'MODULE\s+' + [regex]::Escape($o.Name) + '\s+size=([0-9A-F]+)'
-    $sm = [regex]::Match($lint,$pat,[Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    if(-not $sm.Success) { throw ("no DREL size for " + $o.Name) }
-    $used = [Convert]::ToInt32($sm.Groups[1].Value,16)
-    $free = 0x0FC0 - $used
-    Write-Output ("  {0,-12} used {1,4}  chain-free {2,4}" -f $o.Name,$used,$free)
-    if($free -lt 0) { throw ($o.Name + " exceeds one-page chain-safe limit >0FC0") }
-}
-
-Write-Output "`n--- 7. resident chain lint ---"
-$ResidentObjects = @("LINK99.R99","GETREL.R99","FINAL.R99","OVLMGR.R99","OVLAPI.R99")
-$rLint = & .\drel.exe -c @ResidentObjects 2>&1 | Out-String
-Write-Output $rLint
-if($LASTEXITCODE -ne 0 -or $rLint -notmatch "all chains conform") {
-    throw "resident chain lint failed"
-}
-
-$PageArgs = @()
-foreach($o in $Overlays) {
-    $PageArgs += "-P$($o.Page)"
-    $PageArgs += "$($o.Name).R99"
-}
-$PageArgs += "-P13"; $PageArgs += "OVL_S9.R99"
-$PageArgs += "-P14"; $PageArgs += "OVL_S10.R99"
-$PageArgs += "-P15"; $PageArgs += "OVL_S11.R99"
-
 # Match FILEEDIT's proven ordering: application resident objects, explicit
 # resident I/O/runtime objects, overlay page objects, then C/string libraries.
+# No -P: the pages come from OVLMAP.TXT.
 $LinkArgs = @(
-    "-O1000","-M","-S","SBC99.EXE",
+    "-O1000","-M","-S","-YOVLMAP.TXT","SBC99.EXE",
     "LINK99.R99","GETREL.R99","FINAL.R99","OVLMGR.R99","OVLAPI.R99",
     "CALL.R99","IOCORE.R99","IOOPEN.R99","IOREAD.R99","IOSEEK.R99","IOWRITE.R99","CBDOS.R99"
 )
-$LinkArgs += $PageArgs
+$LinkArgs += $OvlFiles
 $LinkArgs += "CLIB99.LIB"
 $LinkArgs += "STRLIB99.LIB"
 
-Write-Output "`n--- 8. LINK99 ---"
+Write-Output "`n--- 5. LINK99 ---"
 Write-Output (".\link99.exe " + ($LinkArgs -join " "))
 $linkOut = & .\link99.exe @LinkArgs 2>&1 | Out-String
 Write-Output $linkOut
@@ -300,7 +199,51 @@ if($LASTEXITCODE -ne 0 -or
 }
 Need-File ".\SBC99.EXE"
 
-Write-Output "`n--- 9. create SBC deliverable ---"
+# ---- 6. the table link99 built, checked against what LINK99 expects ----
+# OVLAPI.A99 maps the banks by ID through include\OVLDEFS.INC, so every
+# ID there must name the overlay link99 gave that number, with the row
+# this linker's memory model depends on:
+#   USAGE  8/2              the one callable overlay
+#   CODEn  8/(3+n)          the ten target-code banks, n = 0..9
+#   SYM    9/13 A/14 B/15   the symbol workspace (guest: never segment 8)
+Write-Output "`n--- 6. overlay table audit ---"
+$rows = @{}
+$inMap = $false
+foreach($l in ($linkOut -split "\r?\n")) {
+    if($l -match '^OVL99 overlay map') { $inMap = $true; continue }
+    if(-not $inMap) { continue }
+    if($l.Trim() -eq '') { break }
+    $m = [regex]::Match($l, '^\s*ID\s*(\d+)\s+(\S+)\s+seg/page((?:\s+[0-9A-F]/\d+)+)')
+    if($m.Success) { $rows[$m.Groups[2].Value] = @{ Id=[int]$m.Groups[1].Value; Row=($m.Groups[3].Value.Trim() -replace '\s+',' ') } }
+    Write-Output ("  " + $l.Trim())
+}
+if($rows.Count -eq 0) { throw "link99 printed no overlay table: tools\link99.exe must be 3.10.1 or later (-Y)" }
+$expect = [ordered]@{ USAGE = "8/2" }
+foreach($i in 0..9) { $expect[("CODE{0}" -f $i)] = ("8/{0}" -f (3 + $i)) }
+$expect["SYM"] = "9/13 A/14 B/15"
+foreach($k in $expect.Keys) {
+    if(-not $rows.ContainsKey($k)) { throw "link99 built no row for $k" }
+    if($rows[$k].Row -ne $expect[$k]) { throw ("{0} maps {1}, expected {2}" -f $k,$rows[$k].Row,$expect[$k]) }
+}
+$defs = @{}
+foreach($l in (Get-Content -LiteralPath ".\OVLDEFS.INC")) {
+    $m = [regex]::Match($l, '^\s*OVL_(\w+)\s+EQU\s+(\d+)')
+    if($m.Success) { $defs[$m.Groups[1].Value] = [int]$m.Groups[2].Value }
+}
+foreach($k in $expect.Keys) {
+    if(-not $defs.ContainsKey($k)) { throw "OVLDEFS.INC has no OVL_$k" }
+    if($defs[$k] -ne $rows[$k].Id) { throw ("OVLDEFS.INC says OVL_{0} EQU {1}, but link99 made it ID {2}" -f $k,$defs[$k],$rows[$k].Id) }
+}
+Write-Output "Overlay table audit: USAGE 8/2, CODE0-9 8/3..8/12, SYM 9/13 A/14 B/15 (guest); OVLDEFS.INC agrees."
+
+# Page budget for the callable overlay, from link99's -M listing.
+$m = [regex]::Match($linkOut, '(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+OVL_USAGE\s*$')
+if(-not $m.Success) { throw "link99 listed no size for OVL_USAGE" }
+$used = [Convert]::ToInt32($m.Groups[1].Value,16)
+Write-Output ("  OVL_USAGE  used {0,4}  free {1,4}" -f $used,(0x0FC0 - $used))
+if($used -gt 0x0FC0) { throw "OVL_USAGE exceeds the one-page >0FC0 budget" }
+
+Write-Output "`n--- 7. create SBC deliverable ---"
 Copy-Item -LiteralPath ".\SBC99.EXE" -Destination (Join-Path $DistDir "LINK99.EXE") -Force
 $MonitorExe = Join-Path $MonitorDir "LINK99.EXE"
 if(Test-Path -LiteralPath $MonitorDir -PathType Container) {

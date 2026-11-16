@@ -1,4 +1,8 @@
-; LINK99 overlay IDs.
+; LINK99 overlay IDs, used by OVLAPI.A99 to map the banks.
+;
+; These must equal the IDs the host link99 -Y assigns from OVLMAP.TXT (first
+; appearance in the map).  The build checks every one against link99's table
+; and fails on a mismatch.
 ;
 ; OWNERSHIP RULE:
 ;   Callable/executable overlays MUST map virtual segment 8. OVLMGR uses

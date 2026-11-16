@@ -1,0 +1,33 @@
+# SBC LINK99 overlay map - read by the Windows link99 -Y (3.10.1 or later)
+# when this linker is built.  link99 places each module on its page and
+# builds OVL_TABLE and the resident thunk; nothing else declares them.
+#
+#   module     page  overlay  entries
+#
+# IDs follow first appearance: USAGE=1, CODE0..CODE9=2..11, SYM=12.
+# OVLAPI.A99 maps the code and symbol banks by these numbers, kept in
+# include/OVLDEFS.INC; the build checks them against what link99 built.
+#
+# USAGE is the only callable overlay.  runusage() maps it and branches
+# to ovlusage(), which reports and exits, so it needs no return frame.
+OVL_USAGE    2   USAGE    runusage=ovlusage:tail
+#
+# The target-code image: ten 4K data banks, each mapped alone through
+# segment 8 by mapc0()..mapc9().  Never entered as code.
+OVL_CODE0    3   CODE0    -
+OVL_CODE1    4   CODE1    -
+OVL_CODE2    5   CODE2    -
+OVL_CODE3    6   CODE3    -
+OVL_CODE4    7   CODE4    -
+OVL_CODE5    8   CODE5    -
+OVL_CODE6    9   CODE6    -
+OVL_CODE7   10   CODE7    -
+OVL_CODE8   11   CODE8    -
+OVL_CODE9   12   CODE9    -
+#
+# The symbol/XREF workspace: three pages at >9000-BFFF, mapped together
+# by mapsym().  It never maps segment 8 and is never entered as code.
+OVL_S9      13   SYM      -
+OVL_S10     14   SYM      -
+OVL_S11     15   SYM      -
+guest SYM
