@@ -26,7 +26,22 @@ $DistDir     = Join-Path $ProjectRoot "dist"
 #   <workspace>\TMS99105_SBC\MONITOR
 #
 # Keep this workspace-relative: no drive letter or machine-specific absolute path.
-$MonitorDir = Join-Path $ProjectRoot "..\..\TMS99105_SBC\MONITOR"
+# The project may sit at <workspace>\TMS9900 _C\SBC_FileEdit99 or in a git
+# clone at <workspace>\GIT\TMS99105-Native-Toolchain\fileedit, so look for
+# TMS99105_SBC\MONITOR in each folder above this one and use the nearest.
+# $env:SBC_MONITOR_DIR overrides.  Only those exact paths are tested.
+$MonitorDir = $env:SBC_MONITOR_DIR
+if(-not $MonitorDir) {
+    $up = Split-Path -Parent $ProjectRoot
+    while($up) {
+        $c = Join-Path $up "TMS99105_SBC\MONITOR"
+        if(Test-Path -LiteralPath $c -PathType Container) { $MonitorDir = $c; break }
+        $next = Split-Path -Parent $up
+        if(-not $next -or $next -eq $up) { break }
+        $up = $next
+    }
+}
+if(-not $MonitorDir) { $MonitorDir = Join-Path $ProjectRoot "..\..\TMS99105_SBC\MONITOR" }
 $SkipMonitor = ($env:FILEEDIT_SKIP_MONITOR_DEPLOY -eq "1")
 
 function Need-File($Path) {
