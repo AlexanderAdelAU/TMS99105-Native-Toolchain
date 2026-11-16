@@ -39,35 +39,21 @@ visible.
    R99 OVL_VIEW
    R99 EBMAP      (hand-written resident bank mapper)
 
-4. Validate overlay objects and generate the overlay include files:
-
-   DREL -i OVLADDR.INC ^
-     OVL_WORD.R99=2,1,wordscan:O_WORD ^
-     OVL_CHAR.R99=3,2,charscan:O_CHAR ^
-     OVL_RPT.R99=4,3,report:O_RPT ^
-     OVL_VIEW.R99=5,4,viewfile:O_VIEW
-
-   Assignments:
-
-     OVL_WORD -> physical page 2, overlay ID 1
-     OVL_CHAR -> physical page 3, overlay ID 2
-     OVL_RPT  -> physical page 4, overlay ID 3
-     OVL_VIEW -> physical page 5, overlay ID 4
-
-   DREL creates OVLADDR.INC and OVLTABLE.INC.  OVLADDR.INC must contain
-   O_WORD, O_CHAR, O_RPT and O_VIEW.
-
-5. Assemble the resident overlay support after those generated files exist:
-
-   EBMAP.A99 is independent and may be assembled with the resident modules;
-   the PowerShell build script includes EBMAP.R99 in the resident link set.
+4. Assemble the resident overlay runtime.  It includes no generated
+   file: OVLMGR refers to the table with EXT OVL_TABLE.
 
    R99 OVLMGR
-   R99 OVLAPI
+   R99 OVCALL
 
-6. Link the resident modules, runtime libraries and physical overlay pages.
-   make_SBC_filestat99.ps1 shows the exact reference LINK99 command used by the
-   project.
+5. Link with the overlay map.  LINK99 reads OVLMAP.TXT, places each
+   overlay on its page, and builds OVL_TABLE and the resident thunks
+   itself (OVLGLUE.R99).  The overlays need no -P.
+   make_SBC_FileEdit99.ps1 shows the exact command.
+
+   NOTE: -Y is in the Windows-hosted LINK99 3.10.0.  The native SBC
+   LINK99 does not have it yet, so a native link of this version is
+   not possible until it does.  DREL -i and OVLADDR.INC/OVLTABLE.INC
+   are no longer part of the build.
 
 Build-mode distinction:
 

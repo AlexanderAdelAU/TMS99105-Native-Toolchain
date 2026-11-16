@@ -16,7 +16,7 @@ Current features include full-screen VT100/ANSI editing, a display-only
 line-number gutter, cursor navigation, insertion/deletion, real ASCII
 TABs, Open/New/Save/Save As, `[MOD]` dirty-state indication, rolling
 `.BAK` backups, post-save verification, the original FILESTAT
-statistics, seven generated OVL99 code overlays, and interrupt-buffered
+statistics, seven OVL99 code overlays, and interrupt-buffered
 TMS9902 receive input using a 64-byte resident ring.
 
 `FILESTAT.EXE` is still produced as a byte-identical compatibility
@@ -93,27 +93,29 @@ page 8   OVL_NAMEIO filename prompt
 ```
 
 `OVLMAP.TXT` is the source of truth for module IDs, physical pages and
-published entry names. `tools/ovlgen.ps1` and DREL produce the address
-includes, overlay table and resident calling thunks (`OVLTHUNK.A99`).
+published entry names. LINK99 reads it directly (`-YOVLMAP.TXT`, LINK99
+3.10.0 or later) and builds the overlay table and the resident calling
+thunks itself; nothing is generated into the source or build scripts.
 Calls such as `viewfile()` and `editstep()` go through those thunks and
 `OVCALL` rather than manually mapping overlays. The manager maintains
-a 16-frame stack for nested overlay calls, and generated map validation
-prevents code overlays from overwriting the data banks.
+a 16-frame stack for nested overlay calls, and the linker's map checks
+prevent code overlays from overwriting the data banks.
 
-DREL also lints relocation chains and checks one-page overlay size limits.
+DREL lints relocation chains and checks one-page overlay size limits.
 The build checks that published overlay functions resolve to resident
 thunks rather than directly to virtual overlay addresses.
 
-## How transparent overlays work (without changing LINK99)
+## How transparent overlays work
 
 **The key distinction is that LINK99 already knew how to place R99 modules
 in physical pages.** What FileEdit lacked was a stable, resident entry
 point for each exported overlay function, together with a resident runtime
 that could select the page and return through nested overlay calls.
 
-We added that indirection *around* the existing Windows-hosted LINK99,
-not inside the compiler or linker. From ordinary Small-C code, a call
-such as `viewfile()` still looks like any other C function call.
+LINK99 now builds that indirection itself from the overlay map, as
+2.11BSD's `ovld` did. Nothing changes in the compiler, and from ordinary
+Small-C code a call such as `viewfile()` still looks like any other C
+function call.
 
 ### 1. Describe code ownership once
 
@@ -132,40 +134,41 @@ Thus `>8000` by itself does not identify a callable function: the
 runtime must know both the overlay identity and the function's entry
 offset/address within the window.
 
-### 2. Generate the build inputs in two phases
+### 2. Link with the map
 
-[`make_SBC_FileEdit99.ps1`](make_SBC_FileEdit99.ps1) invokes
-[`tools/ovlgen.ps1`](tools/ovlgen.ps1) before and after DREL:
+[`make_SBC_FileEdit99.ps1`](make_SBC_FileEdit99.ps1) compiles and
+assembles every module, lints the overlays with DREL, and links with
+`-YOVLMAP.TXT`. The overlay modules are listed without `-P`. LINK99
+then:
 
-1. **Definitions:** `ovlgen -Phase defs` reads the map and generates
-   `OVLDEFS.INC` (logical IDs) and `OVLDESC.TXT` (DREL module/page/
-   exported-entry descriptors).
-2. **Compile and inspect:** Small-C and R99 build the modules; DREL
-   checks their relocation chains and generates `OVLADDR.INC`
-   (exported overlay entry addresses) and `OVLTABLE.INC` (the
-   segment-to-physical-page table).
-3. **Resident thunks:** `ovlgen -Phase thunks` uses those generated
-   addresses and IDs to produce `OVLTHUNK.A99`. The build assembles
-   this alongside the resident `OVCALL.A99` and `OVLMGR.A99`.
-4. **Ordinary link:** The unchanged Windows LINK99 links the resident
-   objects and places each code module using its existing `-P`
-   physical-page arguments (for example `-P5 OVL_VIEW.R99`).
+1. **Places** each map module on its physical page.
+2. **Renames** each published entry inside its overlay, `viewfile`
+   becoming `~viewfile`, so no outside call can reach the window copy.
+3. **Generates** one resident module, `OVLGLUE.R99`, holding
+   `OVL_TABLE` (segment/page rows, filled from each module's own AORG)
+   and one thunk per published entry under the entry's own name. It
+   is left in `build\` for inspection with DREL.
+4. **Checks** that every module and entry exists, every overlay maps
+   segment 8 first, segments are contiguous, no page is used twice and
+   no overlay leaves the window the map declares (`window 8`).
+
+`OVLMGR.A99` refers to the table with `EXT OVL_TABLE`; it includes no
+generated file.
 
 Every public overlay function gets a small resident *thunk*. A
-representative generated entry is:
+representative thunk is:
 
 ```asm
 viewfile:
-    LI R1,OVL_VIEW
-    LI R2,O_VIEWFILE
+    LI R1,4            ; overlay ID of VIEW
+    LI R2,~viewfile
     B  @OVCALL
 ```
 
-`O_VIEWFILE` comes from DREL; it identifies the real implementation
-inside the `>8000` window. The public symbol `viewfile` belongs to
-the **resident thunk**, which is always available. The final linker
-symbol listing from the successful SBC build resolved `viewfile` to
-resident address `>5462`, not into the overlay window.
+`~viewfile` is the real implementation inside the `>8000` window.
+The public symbol `viewfile` belongs to the **resident thunk**, which
+is always available. The build checks that every outside reference to
+a published entry resolved to a resident thunk, not into the window.
 
 Notice the **`B`**, rather than a new `CALL`. The thunk preserves the
 return address and arguments established by the caller's ordinary C
@@ -202,8 +205,8 @@ prints `OVL99 NESTED PASS` on the TMS99105 SBC.
 
 ### 4. Keep code mapping separate from editor data banking
 
-The generated-overlay validator rejects a code overlay that attempts
-to use a segment other than 8. That protects FileEdit's independent
+The map line `window 8` makes LINK99 reject a code overlay that
+attempts to use a segment other than 8. That protects FileEdit's independent
 [`EBMAP.A99`](src/resident/EBMAP.A99) data mappings at
 `>9000–>BFFF` and the optional editor storage at `>C000–>DFFF`.
 `>E000–>FFFF` (BDOS/ROM) is not remapped by FileEdit.
@@ -219,9 +222,8 @@ are unsafe.
 
 This is **transparent calling**, not automatic function placement.
 
-The existing linker resolves ordinary external symbols. Because the
-generated exported names are defined by **resident thunks**, normal
-C calls link to those thunks. The build verifies LINK99's reported
+LINK99 defines each published name as a **resident thunk** and renames
+the overlay's own copy, so normal C calls link to the thunks. The build verifies LINK99's reported
 external references are to resident addresses, runs DREL chain checks,
 and fails when a mapped code module exceeds the current one-page safe
 budget (**4,032 bytes of a 4,096-byte page**).
@@ -335,7 +337,6 @@ The script also deploys to a sibling MONITOR workspace. Adjust
 src\resident\      resident C and assembly modules
 src\overlays\      mapped code overlays
 OVLMAP.TXT         canonical overlay declarations
-tools\ovlgen.ps1    generated overlay descriptors and thunks
 lib\               runtime objects and libraries
 tools\             compiler/assembler/DREL/linker
 tests\             repeatable sample input

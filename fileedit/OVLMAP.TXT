@@ -1,7 +1,10 @@
 # OVL99 declarative map for FileEdit.
 # module       physical-page  logical-overlay  public-entry-points
-# All six code overlays execute in segment 8 (>8000->8FFF).
+# Read by LINK99 -Y: it assigns the pages, builds OVL_TABLE and the
+# resident thunks, and checks every rule below at link time.
+# All seven code overlays execute in segment 8 (>8000->8FFF).
 # Segments 9-B are document banks; NEVER map overlay code there.
+window 8
 OVL_WORD        2        WORD     wordscan ovprobea
 OVL_CHAR        3        CHAR     charscan ovprobeb
 OVL_RPT         4        RPT      report ovprobec

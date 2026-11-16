@@ -23,11 +23,12 @@ There are seven overlays:
 | 7 | PASTE | `pasteedit` |
 | 8 | NAMEIO | `nmprompt` |
 
-The adapted OVL99 `tools/ovlgen.ps1` has two phases:
-
-1. `defs`, before compilation: `OVLDEFS.INC` and `OVLDESC.TXT`.
-2. `thunks`, after DREL publishes `OVLADDR.INC` and `OVLTABLE.INC`:
-   `OVLTHUNK.A99`, one resident public-name thunk per published entry.
+LINK99 3.10.0 reads the map itself (`-YOVLMAP.TXT`). It assigns the
+pages, renames each published entry `~name` in its overlay, and loads a
+resident `OVLGLUE.R99` holding `OVL_TABLE` and one public-name thunk per
+entry. (This replaced the adapted `tools/ovlgen.ps1` and DREL `-i`, with
+their `OVLDEFS.INC`, `OVLDESC.TXT`, `OVLADDR.INC`, `OVLTABLE.INC` and
+`OVLTHUNK.A99`; none of those files exist any more.)
 
 The build no longer contains hand-maintained overlay IDs, page arguments,
 public DREL entry aliases, or per-function assembly adapters. The
@@ -37,8 +38,8 @@ resident. The old `OVLAPI.A99`, `OVLSTATS.A99` and manually maintained
 
 ## Critical FileEdit-specific constraint
 
-**Code overlays map only segment 8 (`>8000–>8FFF`).** The generator
-rejects DREL tables that map code overlays into any other segment.
+**Code overlays map only segment 8 (`>8000–>8FFF`).** The map line
+`window 8` makes LINK99 reject any code overlay in another segment.
 This deliberately tightens the original OVL99 demo, where overlays could
 span a 16 KB code window. FileEdit already uses `>9000–>BFFF` for
 paged document text and can use `>C000–>DFFF` for further editor data.
@@ -52,8 +53,8 @@ at the same virtual address.
 ## Call behaviour
 
 Application code calls its functions normally, e.g. `viewfile()` and
-`editstep()`. The generated resident thunks set R1 to the overlay ID,
-R2 to the DREL entry address, and branch to `OVCALL`.
+`editstep()`. LINK99's resident thunks set R1 to the overlay ID,
+R2 to the entry address (`~name`), and branch to `OVCALL`.
 
 `OVCALL` takes a fast path when the correct page is already mapped.
 Otherwise it saves the original return address and previous overlay
