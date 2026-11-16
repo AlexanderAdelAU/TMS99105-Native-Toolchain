@@ -91,21 +91,25 @@ The source of the Windows cross tools themselves is in
 
 FileEdit now uses **seven physical code overlays** behind the shared
 `>8000–>8FFF` window. The application makes ordinary C calls (for example
-`viewfile()`); generated *resident thunks* select the correct overlay
-through `OVCALL`/`OVLMGR`, including return to a previously mapped
-overlay after nested calls.
+`viewfile()`); *resident thunks* select the correct overlay through
+`OVCALL`/`OVLMGR`, including return to a previously mapped overlay after
+nested calls.
 
-**No Windows LINK99 changes were required.** `OVLMAP.TXT`,
-`ovlgen.ps1` and DREL generate the page descriptors, entry addresses,
-tables and resident thunks; the existing Windows linker handles symbol
-resolution and physical-page placement. This has been tested on the
-TMS99105 SBC, including nested overlay calls and a roughly 33 KB
-FileEdit save-and-backup test.
+**The Windows LINK99 builds the overlay glue itself** (3.10.0, `-Y`), as
+2.11BSD's `ovld` did. `OVLMAP.TXT` is the only declaration: the linker places
+each module on its page, builds the overlay table and one thunk per published
+entry, and checks the window rules at link time. No generator script, DREL
+step or generated include file is involved. The map format is documented in
+the [link99 README](https://github.com/AlexanderAdelAU/Relocating-Assembler-and-Linker-Loader-for-TMS99000#overlay-map--y).
+This has been tested on the TMS99105 SBC, including nested overlay calls and a
+roughly 33 KB FileEdit save-and-backup test.
+
+The native SBC LINK99 does not have `-Y` yet, so FileEdit is linked on the PC.
 
 The current build still assigns **whole modules to pages manually**;
 automatic module/function placement is a proposed future toolchain
 phase, not a current feature. See the
-[step-by-step implementation explanation](fileedit/README.md#how-transparent-overlays-work-without-changing-link99)
+[step-by-step implementation explanation](fileedit/README.md#how-transparent-overlays-work)
 and [FileEdit overlay map](fileedit/OVLMAP.TXT).
 
 ---

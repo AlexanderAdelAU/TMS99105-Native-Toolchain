@@ -1,5 +1,9 @@
 # OVL99 / FileEdit integration — phase 1 (Statistics)
 
+> **Historical.** The generator and DREL `-i` steps described here were
+> replaced by LINK99 `-Y`, which builds the table and thunks from
+> `OVLMAP.TXT`. See `OVL99_PHASE2.md` and the FileEdit README.
+
 Status: **source-level integration only; not yet compiled or tested on the SBC**.
 
 This branch is intentionally separate from `main`. The existing FileEdit
