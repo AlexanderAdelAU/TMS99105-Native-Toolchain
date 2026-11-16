@@ -16,7 +16,6 @@ $SrcResident = Join-Path $ProjectRoot "src\resident"
 $SrcOverlay  = Join-Path $ProjectRoot "src\overlays"
 $TestsDir    = Join-Path $ProjectRoot "tests"
 $OverlayMap  = Join-Path $ProjectRoot "OVLMAP.TXT"
-$Generator   = Join-Path $ToolsDir "ovlgen.ps1"
 $BuildDir    = Join-Path $ProjectRoot "build"
 $DistDir     = Join-Path $ProjectRoot "dist"
 
@@ -48,7 +47,6 @@ foreach($d in @($ToolsDir,$LibDir,$SrcResident,$SrcOverlay,$TestsDir)) {
 }
 if(-not $SkipMonitor) { Need-Dir $MonitorDir }
 Need-File $OverlayMap
-Need-File $Generator
 
 $RequiredTools = @("smallcp.exe","r99.exe","drel.exe","link99.exe")
 foreach($f in $RequiredTools) {
@@ -162,26 +160,22 @@ function Assemble($Name) {
     }
 }
 
-# Generate IDs and DREL descriptors from OVLMAP.TXT. The build no longer
-# maintains overlay ID, page and function lists by hand.
-Write-Output "`n--- OVL99 map -> definitions and descriptors ---"
-& $Generator -Phase defs -Map ".\OVLMAP.TXT" -Dir "."
-if($LASTEXITCODE -ne 0) { throw "OVL99 defs generation failed" }
-Need-File ".\OVLDEFS.INC"
-Need-File ".\OVLDESC.TXT"
-$Desc = @(Get-Content -LiteralPath ".\OVLDESC.TXT" | Where-Object { $_.Trim() -ne '' })
+# OVLMAP.TXT is read by LINK99 itself (-Y): it assigns the pages, builds
+# OVL_TABLE and one resident thunk per published entry, and checks the
+# window-owner rule.  The script only needs the module names, to compile
+# them, and the entry names, to check the bindings after the link.
 $Overlays = @()
 $OvlFiles = @()
-$PageArgs = @()
-foreach($d in $Desc) {
-    $m = [regex]::Match($d, '^([A-Za-z_][A-Za-z0-9_]*)\.R99=(\d+),(\d+),')
-    if(-not $m.Success) { throw "invalid generated DREL descriptor: $d" }
-    $name = $m.Groups[1].Value
-    $page = [int]$m.Groups[2].Value
-    $Overlays += @{ Name=$name; Page=$page; Id=[int]$m.Groups[3].Value }
-    $OvlFiles += "$name.R99"
-    $PageArgs += "-P$page"
-    $PageArgs += "$name.R99"
+$Entries  = @()
+foreach($raw in (Get-Content -LiteralPath ".\OVLMAP.TXT")) {
+    $line = ($raw -replace '#.*$','').Trim()
+    if($line -eq '') { continue }
+    $f = $line -split '[ \t]+'
+    if($f[0] -ieq 'window') { continue }     # LINK99's segment limit, not a module
+    if($f.Count -lt 4) { throw "OVLMAP.TXT: want 'module page overlay entries': $raw" }
+    $Overlays += @{ Name=$f[0] }
+    $OvlFiles += "$($f[0]).R99"
+    foreach($e in $f[3..($f.Count-1)]) { if($e -ne '-') { $Entries += $e } }
 }
 
 # FILESTAT owns the IOLIB startup.  Every other C file is a module.
@@ -205,31 +199,8 @@ if($LASTEXITCODE -ne 0 -or $lint -notmatch "all chains conform") {
     throw "overlay chain lint failed"
 }
 
-# DREL creates the resident include files from the overlay entry records.
-$drelArgs = @("-i","OVLADDR.INC")
-foreach($d in $Desc) {
-    $drelArgs += $d
-}
-
-Write-Output "`n--- DREL generated overlay tables ---"
-$gen = & .\drel.exe @drelArgs 2>&1 | Out-String
-Write-Output $gen
-if($LASTEXITCODE -ne 0) {
-    throw "DREL include generation failed"
-}
-
-Need-File ".\OVLADDR.INC"
-Need-File ".\OVLTABLE.INC"
-
-# Generate public thunks AFTER DREL has published entry addresses.
-Write-Output "`n--- OVL99 map -> public entry thunks ---"
-& $Generator -Phase thunks -Map ".\OVLMAP.TXT" -Dir "."
-if($LASTEXITCODE -ne 0) { throw "OVL99 thunks generation failed" }
-Need-File ".\OVLTHUNK.A99"
-
 Assemble "OVLMGR"
 Assemble "OVCALL"
-Assemble "OVLTHUNK"
 
 Write-Output "`n--- overlay page budgets ---"
 foreach($o in $Overlays) {
@@ -256,7 +227,7 @@ foreach($o in $Overlays) {
 
 Write-Output "`n--- resident chain lint ---"
 $ResidentObjects = @(
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99"
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99"
 )
 $rLint = & .\drel.exe -c @ResidentObjects 2>&1 | Out-String
 Write-Output $rLint
@@ -265,11 +236,11 @@ if($LASTEXITCODE -ne 0 -or $rLint -notmatch "all chains conform") {
 }
 
 $LinkArgs = @(
-    "-O1000","-M","-S","FILEEDIT.EXE",
-    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99","OVLTHUNK.R99",
+    "-O1000","-M","-S","-YOVLMAP.TXT","FILEEDIT.EXE",
+    "FILESTAT.R99","FILEIO.R99","FILEDATA.R99","TERMIO.R99","CONRX.R99","EBMAP.R99","EDITBUF.R99","VIEWCTL.R99","EDITCTL.R99","EDITMENU.R99","OVLMGR.R99","OVCALL.R99",
     "CALL.R99","IOCORE.R99","IOOPEN.R99","IOREAD.R99","IOWRITE.R99","CBDOS.R99"
 )
-$LinkArgs += $PageArgs
+$LinkArgs += $OvlFiles      # no -P: the pages come from OVLMAP.TXT
 $LinkArgs += "CLIB99.LIB"
 
 # Final gate immediately before LINK99.  This catches any accidental overwrite
@@ -298,20 +269,17 @@ if($LASTEXITCODE -ne 0 -or
    $linkOut -match '(?im)^\s*\*{3}\s*FATAL\b') {
     throw "LINK99 failed"
 }
+if($linkOut -notmatch '(?m)^OVL99 overlay map') {
+    throw "LINK99 did not read the overlay map: tools\link99.exe must be 3.10.0 or later (-Y)"
+}
 
 # Verify every externally referenced published entry bound to its resident
 # thunk. A direct bind to >8000 would be unsafe after an overlay switch.
-Write-Output "`n--- OVL99 generated entry bindings ---"
+Write-Output "`n--- OVL99 entry bindings (LINK99 -Y thunks) ---"
 $Bindings = @{}
 foreach($line in ($linkOut -split "`r?`n")) {
     $m = [regex]::Match($line, 'xref\s+(\S+)\s+@\s*([0-9A-F]+)\s*=\s*([0-9A-F]+)', 'IgnoreCase')
     if($m.Success) { $Bindings[$m.Groups[1].Value.ToLowerInvariant()] = $m.Groups[3].Value }
-}
-$Entries = @()
-foreach($d in $Desc) {
-    foreach($m in [regex]::Matches($d, '([A-Za-z_][A-Za-z0-9_]*):O_')) {
-        $Entries += $m.Groups[1].Value
-    }
 }
 foreach($entry in @($Entries | Sort-Object -Unique)) {
     if(-not $Bindings.ContainsKey($entry)) {
@@ -321,7 +289,9 @@ foreach($entry in @($Entries | Sort-Object -Unique)) {
     if($bound -ge 0x8000 -or $bound -lt 0x1000) {
         throw ("OVL99: {0} resolved at >{1:X4}, outside resident program" -f $entry,$bound)
     }
-    Write-Output ("  {0,-12} -> >{1:X4} resident thunk" -f $entry,$bound)
+    $real = ""
+    if($Bindings.ContainsKey("~$entry")) { $real = " -> ~$entry >" + $Bindings["~$entry"] }
+    Write-Output ("  {0,-12} -> >{1:X4} resident thunk{2}" -f $entry,$bound,$real)
 }
 
 Need-File ".\FILEEDIT.EXE"
