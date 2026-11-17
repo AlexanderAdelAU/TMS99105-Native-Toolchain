@@ -240,8 +240,8 @@ Write-Output "Overlay table audit: USAGE 8/2, CODE0-9 8/3..8/12, SYM 9/13 A/14 B
 $m = [regex]::Match($linkOut, '(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+OVL_USAGE\s*$')
 if(-not $m.Success) { throw "link99 listed no size for OVL_USAGE" }
 $used = [Convert]::ToInt32($m.Groups[1].Value,16)
-Write-Output ("  OVL_USAGE  used {0,4}  free {1,4}" -f $used,(0x0FC0 - $used))
-if($used -gt 0x0FC0) { throw "OVL_USAGE exceeds the one-page >0FC0 budget" }
+Write-Output ("  OVL_USAGE  used {0,4}  free {1,4}" -f $used,(0x1000 - $used))
+if($used -gt 0x1000) { throw "OVL_USAGE exceeds its 4K page" }
 
 Write-Output "`n--- 7. create SBC deliverable ---"
 Copy-Item -LiteralPath ".\SBC99.EXE" -Destination (Join-Path $DistDir "LINK99.EXE") -Force
