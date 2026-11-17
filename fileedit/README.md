@@ -93,8 +93,8 @@ page 8   OVL_NAMEIO filename prompt
 ```
 
 `OVLMAP.TXT` is the source of truth for module IDs, physical pages and
-published entry names. LINK99 reads it directly (`-YOVLMAP.TXT`, LINK99
-3.10.0 or later) and builds the overlay table and the resident calling
+published entry names. LINK99 reads it directly (`-YOVLMAP.TXT`; the
+build uses link99 3.10.3) and builds the overlay table and the resident calling
 thunks itself; nothing is generated into the source or build scripts.
 Calls such as `viewfile()` and `editstep()` go through those thunks and
 `OVCALL` rather than manually mapping overlays. The manager maintains
@@ -107,6 +107,9 @@ The build checks that published overlay functions resolve to resident
 thunks rather than directly to virtual overlay addresses.
 
 ## How transparent overlays work
+
+(The general reference for OVL99 — runtime, table format, map, rules — is
+[OVL99.md](../OVL99.md); this section walks through FileEdit's use of it.)
 
 **The key distinction is that LINK99 already knew how to place R99 modules
 in physical pages.** What FileEdit lacked was a stable, resident entry
@@ -138,8 +141,8 @@ offset/address within the window.
 ### 2. Link with the map
 
 [`make_SBC_FileEdit99.ps1`](make_SBC_FileEdit99.ps1) compiles and
-assembles every module, lints the overlays with DREL, and links with
-`-YOVLMAP.TXT`. The overlay modules are listed without `-P`. LINK99
+assembles every module and links with `-YOVLMAP.TXT`; LINK99 itself checks
+every object's external-reference slots (formerly DREL's lint). The overlay modules are listed without `-P`. LINK99
 then:
 
 1. **Places** each map module on its physical page.
@@ -148,7 +151,7 @@ then:
 3. **Generates** one resident module, `OVLGLUE.R99`, holding
    `OVL_TABLE` (segment/page rows, filled from each module's own AORG)
    and one thunk per published entry under the entry's own name. It
-   is left in `build\` for inspection with DREL.
+   is left in `build\` for inspection.
 4. **Checks** that every module and entry exists, every overlay maps
    segment 8 first, segments are contiguous, no page is used twice and
    no overlay leaves the window the map declares (`window 8`).
@@ -307,8 +310,8 @@ The supplied Windows-hosted toolchain contains:
 
 -   `smallcp.exe`
 -   `r99.exe`
--   `drel.exe`
--   `link99.exe`
+-   `link99.exe` (3.10.3)
+-   `drel.exe` (an object dumper, for inspection; not used by the build)
 
 From the `fileedit/` directory run on Windows:
 
@@ -321,8 +324,8 @@ sibling monitor directory. `.github/workflows/ovl99-fileedit.yml` runs
 the same build in Windows GitHub Actions.
 
 The script stages inputs into `build\`, compiles resident modules and
-overlays, runs DREL chain lint, generates overlay tables, checks
-one-page overlay budgets, links, and writes:
+overlays, links with `-YOVLMAP.TXT` (which builds the overlay table and
+thunks), checks one-page overlay budgets, and writes:
 
 ``` text
 dist\FILEEDIT.EXE
@@ -330,8 +333,14 @@ dist\FILESTAT.EXE
 dist\SAMPLE.TXT
 ```
 
-The script also deploys to a sibling MONITOR workspace. Adjust
-`$MonitorDir` if your checkout layout differs.
+The script also copies `FILEEDIT.EXE` to the MONITOR folder: the nearest
+`TMS99105_SBC\MONITOR` above the project, or `$env:SBC_MONITOR_DIR`.
+
+This one `FILEEDIT.EXE` download is the normal way to put FileEdit on the
+SBC.  FileEdit can also be linked **on the SBC** by the native LINK99:
+`link99\tests\fileedit\make_test_fileedit.ps1` packs the 17 files it needs
+into one `FE.PAK`; on the SBC `XMODEM FE.PAK`, `UNPACK FE`,
+`LINK99 @FILEEDIT.LNK`.
 
 ## Repository layout
 
@@ -340,7 +349,7 @@ src\resident\      resident C and assembly modules
 src\overlays\      mapped code overlays
 OVLMAP.TXT         canonical overlay declarations
 lib\               runtime objects and libraries
-tools\             compiler/assembler/DREL/linker
+tools\             compiler, assembler, linker (and DREL, for inspection)
 tests\             repeatable sample input
 docs\              architecture and milestone notes
 build\             disposable build directory

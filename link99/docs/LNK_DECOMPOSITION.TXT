@@ -1,6 +1,10 @@
 LNK.C ANCESTOR - INITIAL DECOMPOSITION
 ======================================
 
+(The plan made at Step 0, kept for its reasoning.  Library search, show
+and .R$ were kept in the end; the output format and memory model were
+replaced.  See ../README.md for what LINK99 does now.)
+
 KEEP / ADAPT (core linker algorithm)
 ------------------------------------
   getname      module identity

@@ -68,6 +68,17 @@ Step 8  Emit several modules linked at one virtual overlay window.
 Step 9  Libraries.
 Step 10 Overlay the LINKER itself only if measured resident size requires it.
 
+STATUS (17 NOVEMBER 2026)
+-------------------------
+All of the above is done, by a different route for the overlay model:
+SBC LINK99 writes the shell's paged EXE (chain blocks), places -P modules
+on their pages, and reads the same -Y overlay map as the Windows link99,
+building OVL_TABLE and the thunks itself.  Its output is byte-identical to
+the Windows link99 3.10.3 given the same arguments, and it has linked
+CTEST + a -P overlay, the OVL99 hello demo and FileEdit on the board.
+The linker itself is overlaid (eight code pages behind >8000) and keeps
+the target image in segment C.  See ../README.md for usage and memory.
+
 RULES
 -----
 1. CommonLibrary REL definitions are canonical; LINK99 must not fork them.

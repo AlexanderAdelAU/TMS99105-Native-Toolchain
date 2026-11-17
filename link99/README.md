@@ -1,6 +1,6 @@
 # SBC LINK99
 
-SBC LINK99 is a ground-up small-machine linker project for the TMS9900/TMS99105 SBC. It starts from the compact historical `LNK.C` algorithm and uses the current **CommonLibrary REL definitions as the canonical object-format contract**. The current Windows `LINK99` remains the regression oracle and, initially, the host linker used to build the SBC version.
+SBC LINK99 is the linker that runs on the TMS9900/TMS99105 SBC. It starts from the compact historical `LNK.C` algorithm and uses the **CommonLibrary REL definitions as the canonical object-format contract**. The Windows `link99` is its regression oracle and the host linker that builds it.
 
 The development method deliberately follows the successful FileEdit project: begin with a small, understandable resident program; add one proven capability at a time; keep persistent state separate from disposable passes; and introduce overlays only at natural architectural boundaries.
 
@@ -14,10 +14,14 @@ The development method deliberately follows the successful FileEdit project: beg
   - The first name may be the output name (`FILEEDIT.EXE`); otherwise the output is named after the first module.
   - Libraries must come **before** the first `-P` module, or a member loaded after the overlays lands above them and the link is refused.
 - `LINK99 @FILE.LNK` reads the arguments from a text file (the shell's command line is 64 characters). Whitespace or line breaks separate them; `#` starts a comment.
-- File names are 8.3 on the SBC: `OVL_PASTE.R99` on a command line opens `OVL_PAST.R99`, so upload such modules under the truncated name.
+- File names are 8.3 on the SBC: `OVL_PASTE.R99` on a command line opens `OVL_PAST.R99`, so such modules must be on the SBC under the cut name. `pack99.ps1` (see [`../pack99`](../pack99/)) cuts names the same way, so packed files arrive right.
 - `-Ymap` reads the same OVL99 overlay map as the Windows `link99 -Y` (module page overlay entries; `pub=routine`; `:tail`; `guest`; `window`), places the map modules, renames published entries `~name`, and writes `OVL_TABLE` and the thunks itself (no `OVLGLUE.R99`), with the same checks. Not on the SBC: page spans (`lo-hi`). Limits: 36 modules, 24 overlays, 40 entries.
 - `EXT+offset` references (`@OVL_TABLE+2`) keep their offset (up to 32 per program).
-- Test: `tests/ovly` (`make_test_ovly.ps1`, then `LINK99 @HELLO.LNK` and `HELLO` on the SBC).
+- Tests (each makes a Windows reference from the same arguments):
+  - `tests/paged`: a `-P` overlay, `LINK99 @T2.LNK` with a CTEST of your own.
+  - `tests/ovly`: the OVL99 hello demo with `-Y` (`make_test_ovly.ps1`, then `LINK99 @HELLO.LNK` and `HELLO`).
+  - `tests/fileedit`: FileEdit from libraries with `-Y`, sent as one archive (`make_test_fileedit.ps1`, then `XMODEM FE.PAK`, `UNPACK FE`, `LINK99 @FILEEDIT.LNK`).
+- Hardware-tested: `-P` (CTEST + T2), `-Y` (hello demo), and the FileEdit link above, which runs.
 
 ## Memory
 
@@ -36,13 +40,13 @@ include/            LINK99-specific interfaces/configuration
 common/Includes/    canonical CommonLibrary REL headers
 common/rel99/       canonical GETREL/PUTREL/SEEREL sources
 common/cfunctions/  shared Small-C helpers
-reference/           historical/reference implementations
-lib/                 target runtime libraries used to build LINK99
- tools/               Windows-hosted compiler/assembler/linker (link99 3.10.1 or later)
- tests/               repeatable test inputs and expected results
- docs/                architecture and milestone notes
- build/               disposable staged build directory
- dist/                final deliverables only
+reference/          historical/reference implementations
+lib/                target runtime libraries used to build LINK99
+tools/              Windows-hosted smallcp, r99, link99 (3.10.3), lib99, drel
+tests/              board tests: paged, ovly, fileedit
+docs/               architecture and overlay notes
+build/              disposable staged build directory
+dist/               final deliverables only
 ```
 
 ## Build

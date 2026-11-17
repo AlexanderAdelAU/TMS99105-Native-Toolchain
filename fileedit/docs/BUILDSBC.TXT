@@ -22,6 +22,9 @@ visible.
    SMALLC99 OVL_CHAR -M
    SMALLC99 OVL_RPT  -M
    SMALLC99 OVL_VIEW -M
+   SMALLC99 OVL_EDIT -M
+   SMALLC99 OVL_PASTE -M      (the SBC file is OVL_PAST: names are 8.3)
+   SMALLC99 OVL_NAMEIO -M     (the SBC file is OVL_NAME)
 
 3. Assemble the generated A99 modules:
 
@@ -37,7 +40,11 @@ visible.
    R99 OVL_CHAR
    R99 OVL_RPT
    R99 OVL_VIEW
+   R99 OVL_EDIT
+   R99 OVL_PASTE
+   R99 OVL_NAMEIO
    R99 EBMAP      (hand-written resident bank mapper)
+   R99 CONRX      (hand-written interrupt-driven console receive)
 
 4. Assemble the resident overlay runtime.  It includes no generated
    file: OVLMGR refers to the table with EXT OVL_TABLE.
@@ -50,10 +57,14 @@ visible.
    itself (OVLGLUE.R99).  The overlays need no -P.
    make_SBC_FileEdit99.ps1 shows the exact command.
 
-   NOTE: -Y is in the Windows-hosted LINK99 3.10.0.  The native SBC
-   LINK99 does not have it yet, so a native link of this version is
-   not possible until it does.  DREL -i and OVLADDR.INC/OVLTABLE.INC
-   are no longer part of the build.
+   The native SBC LINK99 reads the same map (-Y) and gives the same
+   FILEEDIT.EXE as the Windows link99 from the same arguments.  The
+   command line is too long for the shell, so the arguments go in a
+   file: LINK99 @FILEEDIT.LNK.  link99\tests\fileedit has a FILEEDIT.LNK
+   that takes the resident modules from a library, and packs everything
+   into one FE.PAK for XMODEM (UNPACK FE on the SBC).  This link has
+   been run on the board (17 November 2026).  DREL -i and
+   OVLADDR.INC/OVLTABLE.INC are no longer part of the build.
 
 Build-mode distinction:
 
