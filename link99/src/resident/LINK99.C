@@ -3,7 +3,21 @@
 **
 **                    Copyright 1985 J. E. Hendrix
 **
-** Usage: LNK [-B] [-G#] [-L] [-M] program [module/library...]
+** Usage: LNK [-B] [-G#] [-L] [-M] [-O#] [-S] program [[-P#] module/library...]
+**        LNK @file        (arguments read from a file; see OVL_USAGE.C)
+**
+** -O#                Origin: base the resident image at # (hex), as the
+**                    Windows link99 does.  Default 1000.
+**
+** -S                 Accepted for command-line compatibility with the
+**                    Windows link99, where it is also a no-op.
+**
+** -P#                The module(s) that follow are an overlay on physical
+**                    page # (1-15).  Each must AORG itself into its
+**                    segment (>8000 for the overlay window) and stay
+**                    inside that one 4K segment.  The output becomes a
+**                    paged EXE: chain blocks, resident image on page 0.
+**                    A library resets the page to 0, as on Windows.
 **
 ** -B                 A BIG program is being linked, so use all
 **                    of free memory for the symbol table and load the
@@ -126,6 +140,7 @@
 #define LIBEXT  ".LIB"
 #define NDXEXT  ".NDX"
 #define COMEXT  ".COM"
+#define EXEEXT  ".EXE"
 #define LGOEXT  ".LGO"
 #define OFLEXT   ".O$"
 #define REFEXT   ".R$"
@@ -141,8 +156,8 @@
 */
 #define CODEWIN   0xC000	/* segment C: free while an EXE runs */
 #define CODEMASK  0x0FFF
-#define CODEBANKS 10		/* pages 2..11 behind segment C, banks 0..9 */
-#define CODEMAX   0xA000	/* documentation only: 10 x 4K bytes */
+#define CODEBANKS 15		/* banks 0..14: C pages 2..15, then C page 1 */
+#define CODEMAX   0xF000	/* documentation only: 15 x 4K bytes */
 #define SYMWIN    0x9000
 #define SYMSIZE   0x3000	/* fixed symbol/XREF table window: >9000-BFFF */
 
@@ -261,6 +276,35 @@ unsigned ubn, usn;
  */
 unsigned ucl, ucd;
 
+/*
+** Paged EXE output (-P).
+**
+** A -P module is loaded into the same linear code image as everything
+** else - the banks hold it at cloc like any module - but it is AORG'd:
+** its PREL values are already its final addresses (>8xxx), so they are
+** stored as they are and never relocated by cbase.  Each such module is
+** one row here: its linear span, its load address and its page.  The
+** rest of the linear image is resident, page 0, at cbase + offset,
+** exactly as the Windows link99 lays it out.  exeout() (OVL_EXE) turns
+** the rows into EXE chain blocks.
+**
+** Pages are per segment (page 3 behind >8000 is not page 3 behind
+** >9000), so a row is really (segment of pmva, page).
+*/
+#define MAXPM 32
+int pagemode;		/* any -P on the command line: output is an EXE   */
+int curpage;		/* page the next module goes to (0 = resident)    */
+int pgmod;		/* page of the module being loaded                */
+int pmorg;		/* its AORG address, 0 until the AORG is seen      */
+int oflag;		/* -O given: keep its cbase                        */
+int pmn;		/* rows used                                       */
+int *pmls;		/* linear start      \  four MAXPM-word arrays at    */
+int *pmle;		/* linear end         | the bottom of the symbol     */
+int *pmva;		/* load address       | window (getmem), not in      */
+int *pmpg;		/* page              /  resident RAM                 */
+int rargv;		/* argv built by rdargs() from an @file            */
+char *symtop;		/* top of the symbol table: below rdargs' text     */
+
 int xrefs;      /* an EXT "XREFS" marker has been seen           */
 int xrsym;      /* the xr entry the following CHAIN items feed    */
 int cbank;      /* currently mapped code-image bank, or -1         */
@@ -280,13 +324,22 @@ int field;
 char symbol[MAXSYM+1];
 
 
-main(argc,argv) int argc, argv[]; {
+main(argc,argv) int argc, *argv; {
+  char *arg1;
   ovlinit();                     /* same overlay startup used by FILEEDIT/FILESTAT */
   puts2("SBC LINK99 native linker", "");
+  if(argc == 2) {		/* LINK99 @file: arguments from a file */
+    arg1 = argv[1];
+    if(*arg1 == '@') {
+      argc = rdargs(arg1 + 1, argv[0]);
+      argv = rargv;
+      }
+    }
   getsw(argc, argv);		/* fetch and remember switches */
   getmem();			/* acquire maximum memory buffer */
   phase1(argc, argv);		/* load and link */
-  if(!final()) abort(7);		/* resident final pass */
+  if(!okay()) abort(7);		/* phase 2, from overlays */
+  if(pagemode) exeout(); else comout();
   }
 
 /*
@@ -296,10 +349,15 @@ getmem() {
   char sz[12];
 
   mapsym();
-  buffer = SYMWIN;
+  pmls = SYMWIN;			/* the -P rows, then the symbols */
+  pmle = pmls + MAXPM;
+  pmva = pmle + MAXPM;
+  pmpg = pmva + MAXPM;
+  buffer = pmpg + MAXPM;
   bnext = 0;
   cbank = -1;
-  snext = SYMWIN + (SYMSIZE - SSZ);
+  if(!symtop) symtop = SYMWIN + SYMSIZE;	/* rdargs may have taken the top */
+  snext = symtop - SSZ;
   sfree = 0;
 #ifdef DEBUG
   if(monitor) {itou(SYMSIZE, sz, 8); puts2(sz, " Symbol Bytes");}
@@ -346,27 +404,6 @@ getndx() {
 
   inblock = (b[0] & 255) | ((b[1] & 255) << 8);
   inbyte  = (b[2] & 255) | ((b[3] & 255) << 8);
-  }
-
-/*
-** get switches from command line
-*/
-getsw(argc, argv) int argc, *argv; {
-  char arg[NAMESIZE];
-  int argnbr, b, len;
-  argnbr = 0;
-  while(getarg(++argnbr, arg, NAMESIZE, argc, argv) != EOF) {
-    if(arg[0] != '-') continue;			/* skip file names */
-    if(toupper(arg[1]) == 'G') {
-      lgo = YES;
-      len = xtoi(arg + 2, &b);
-      if(len >= 0 && !arg[len + 2]) cbase = b; else runusage();
-      }
-    else if(toupper(arg[1]) == 'B') big = YES;
-    else if(toupper(arg[1]) == 'L') list = YES;
-    else if(toupper(arg[1]) == 'M') monitor = YES;
-    else runusage();
-    }
   }
 
 /*
@@ -467,17 +504,29 @@ load() {
                    ++cloc;
                    break;
 
-      case   PREL: field = field + cmod;
-                   codeneed(2);
-                   codeputw(cloc, field);
-                   refword(cloc);
+      case   PREL: codeneed(2);
+                   if(pgmod) {		/* AORG: already final */
+                     pgorg();
+                     codeputw(cloc, field);
+                     }
+                   else {
+                     codeputw(cloc, field + cmod);
+                     refword(cloc);
+                     }
                    cloc += 2;
                    break;
 
       case  DSIZE: if(!field) break;
           default: error("- Unsupported Link Item");
       case    ERR: error("- Corrupt Module");
-      case  EPROG: if(type == PREL) {
+      case  EPROG: if(pgmod) {
+                     pgorg();
+                     pmle[pmn - 1] = cloc;
+                     ucl = (pmorg & CODEMASK) + (cloc - cmod);
+                     if(ucl > 0x1000) error2("- Overlay crosses 4K: ", modname);
+                     break;
+                     }
+                   if(type == PREL) {
                      puts2("Start In ", modname);
                      goloc = field + cmod;
                      }
@@ -496,15 +545,20 @@ load() {
                    break;
 
       case  CHAIN: if(!xrsym) error("- CHAIN without XCHAIN");
-                   field = field + cmod;
+                   field = pglin(field);
                    codeputw(field, getint(xrsym + VAL));
                    putint(xrsym + VAL, field);
                    break;
 
-      case EPOINT: newsym(&epprev, epfirst, "ep");
+      case EPOINT: if(pgmod) if(type == PREL) {
+                     field = field - cbase;	/* resolve() adds it back */
+                     type = ABS;
+                     }
+                   newsym(&epprev, epfirst, "ep");
                    break;
 
       case  PSIZE: cmod = cloc;
+                   pmorg = 0;
                    if(monitor) {
                      itox(field, str, 8);
                      fputs(str, stdout); fputs(" Bytes at", stdout);
@@ -516,7 +570,15 @@ load() {
                    codeneed(field);
                    break;
 
-      case  SETLC: field = field + cmod;
+      case  SETLC: if(pgmod) if(!pmorg) {	/* the AORG */
+                     if(cloc != cmod) pgorg();
+                     if(pmn >= MAXPM) error("- Too many overlays");
+                     pmorg = field;
+                     pmls[pmn] = pmle[pmn] = cloc;
+                     pmva[pmn] = field;
+                     pmpg[pmn++] = pgmod;
+                     }
+                   field = pglin(field);
                    ucl = cloc;
                    ucd = field;
                    while(ucl < ucd) {
@@ -533,6 +595,24 @@ load() {
                    break;
       }
     } while(item != EPROG);
+  }
+
+/*
+** a location in the module being loaded, as a linear image offset
+*/
+pglin(v) int v; {
+  if(!pgmod) return v + cmod;
+  pgorg();
+  ucl = v; ucd = pmorg;
+  if(ucl < ucd) {pmorg = 0; pgorg();}
+  return v - pmorg + cmod;
+  }
+
+/*
+** a -P module must have AORG'd itself before it places anything
+*/
+pgorg() {
+  if(!pmorg) error2("- Overlay not AORG'd: ", modname);
   }
 
 /*
@@ -623,32 +703,46 @@ phase1(argc, argv) int argc, *argv; {
    * local char array written to its last element needs the same slack.
    */
   char sz[12];
-  int i, lib, eof;
+  int i, lib, eof, pgprev;
   eof = EOF;
   cdisk = CODEMAX;			/* old disk-spill limit: no .O$ */
   if(lgo) instr = RET;			/* load and go format */
-  else {instr = JMP; cbase = COMBASE;}	/* COM file format */
+  else {instr = JMP; if(!oflag) cbase = COMBASE;}	/* COM file format */
   i = 0;
+  pgprev = NO;
   while(getarg(++i, infn, NAMESIZE, argc, argv) != EOF) {
-    if(infn[0] == '-') continue;	/* skip switches */
+    if(infn[0] == '-') {		/* -P# applies to what follows */
+      if(toupper(infn[1]) == 'P') {
+        curpage = pgnum(infn);
+        pgprev = YES;
+        }
+      continue;
+      }
+    if(!*outfn) if(outname(infn)) {	/* PROG.EXE / .COM: name only */
+      strcpy(outfn, infn);
+      openref(infn);
+      continue;
+      }
     if(extend(infn, MODEXT, LIBEXT))
          lib = YES;
     else lib = NO;
+    if(lib) if(!pgprev) curpage = 0;	/* as on Windows */
+    pgprev = NO;
     if(!*outfn) {			/* first file name */
       if(lgo) newfn(outfn, infn, LGOEXT);
+      else if(pagemode) newfn(outfn, infn, EXEEXT);
       else    newfn(outfn, infn, COMEXT);
-      newfn(crfn, infn, REFEXT);
-      crfd = open(crfn, "w+");
-
-      if(!crfd) error2("- cannot open ", crfn);		/* open reference file */
-      auxbuf(crfd, AUXBUF);	/* extra buffering lowers head movement */
+      openref(infn);
       }
     if(lib) {			/* search library if unresolved ext refs */
+      if(curpage) error2("- A library cannot be an overlay: ", infn);
+      pgmod = 0;
       status("Search ", infn);
       search();
       }
     else {
       status("Load   ", infn);
+      pgmod = curpage;
       inrel = open(infn, "r");
       if(!inrel) error2(infn, " - cannot open");
       ifilelbuf();                 /* new REL file: discard GETREL byte buffer */
@@ -660,6 +754,7 @@ phase1(argc, argv) int argc, *argv; {
       }
     }
   if(!*outfn) runusage();
+  pgmod = 0;
   if(*tmfn) {				/* must get terminal module */
     inrel = open(tmfn, "r");
     ifilelbuf();                   /* new REL file */
@@ -874,6 +969,11 @@ int addr;
       case  7: mapc7();  break;
       case  8: mapc8();  break;
       case  9: mapc9();  break;
+      case 10: mapc10(); break;
+      case 11: mapc11(); break;
+      case 12: mapc12(); break;
+      case 13: mapc13(); break;
+      case 14: mapc14(); break;
       default: error("- Program too large for code banks");
       }
     cbank = b;

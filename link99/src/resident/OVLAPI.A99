@@ -19,6 +19,15 @@ R1      EQU     1
         EXT     OVLMGR
         EXT     OVLMGR_INIT
 
+; Library routines that only the overlays call (getsw).  Naming
+; them here makes the libraries load them with the resident image, so
+; they are placed below the overlays: a member pulled in after the
+; overlays is placed above them, by their size, and link99 refuses a
+; resident module that reaches the overlay window.
+        EXT     xtoi
+LIBKEEP:                                ; never executed
+        B       @xtoi
+
 ovlinit:
         ; OVLMGR_INIT clears CURRENT_PAGE[], CURRENT_ID[] and CUR_WINA_ID.
         ; Keep all overlay activity behind this explicit startup boundary.
@@ -80,6 +89,31 @@ mapc9:
         CALL    @OVLMGR
         RET
 
+mapc10:
+        LI      R1,OVL_CODE10
+        CALL    @OVLMGR
+        RET
+
+mapc11:
+        LI      R1,OVL_CODE11
+        CALL    @OVLMGR
+        RET
+
+mapc12:
+        LI      R1,OVL_CODE12
+        CALL    @OVLMGR
+        RET
+
+mapc13:
+        LI      R1,OVL_CODE13
+        CALL    @OVLMGR
+        RET
+
+mapc14:
+        LI      R1,OVL_CODE14
+        CALL    @OVLMGR
+        RET
+
         ENT     ovlinit
         ENT     mapsym
         ENT     mapc0
@@ -92,4 +126,9 @@ mapc9:
         ENT     mapc7
         ENT     mapc8
         ENT     mapc9
+        ENT     mapc10
+        ENT     mapc11
+        ENT     mapc12
+        ENT     mapc13
+        ENT     mapc14
         END
