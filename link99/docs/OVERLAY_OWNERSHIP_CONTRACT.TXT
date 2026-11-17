@@ -21,16 +21,24 @@ RULES
    mapped workspace or storage bank, but it must never be entered with CALL,
    BL, B, or any other executable transfer.
 
-4. Current LINK99 classifications are:
+4. Current LINK99 classifications (OVLMAP.TXT):
 
-      ID 1       OVL_USAGE        Executable   segment 8, page 2
-      IDs 2-11   OVL_CODE0..9     Data         segment 8, pages 3-12
-      ID 12      SYMBOLS          Data         segments 9-11, pages 13-15
+      ID 1       USAGE            Executable   segment 8, page 2
+      IDs 2-11   CODE0..CODE9     Data         segment C, pages 2-11
+      ID 12      SYM              Data         segments 9-B, pages 13-15
+      ID 13      FINAL            Executable   segment 8, page 3
+      ID 14      EXE              Executable   segment 8, page 4
+      IDs 15-19  CODE10..CODE14   Data         segment C, pages 12-15, 1
+      ID 20      MAP              Executable   segment 8, page 5
+      ID 21      GLUE             Executable   segment 8, page 6
+      ID 22      MAPM             Executable   segment 8, page 7
+      ID 23      CHK              Executable   segment 8, page 8
+      ID 24      TAB              Executable   segment 8, page 9
 
-   All three are declared in OVLMAP.TXT, read by the host link99 -Y when this
-   linker is built.  The banks publish no entries, so nothing can call them.
-   SYMBOLS is declared "guest SYM": link99 fails the link if it ever maps
-   segment 8.
+   The data banks are "guest" overlays and publish no entries, so nothing
+   can call them; link99 fails the link if a guest maps segment 8.
+   Segment D is never mapped: the shell keeps its internal commands on
+   D pages 2-10.
 
 5. When adding a new overlay, add it to OVLMAP.TXT.  link99 fails the link if
    a non-guest overlay does not map segment 8 first and exactly once, or if a
