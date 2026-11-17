@@ -99,11 +99,22 @@ outunstage()
 }
 
 
+/*
+** the load address (FCB 16-17) and, for a paged EXE, the file type
+** (FCB 11) - set again after MAKE and before CLOSE, because MAKE does not
+** keep them; the BDOS records both at CLOSE.  XMODEM does the same.
+**
+** The shell picks the loader from that file type, not the extension:
+** 0 or 1 runs flat, 2 through the chain-block EXE loader.  A paged EXE
+** left at 0 is run as a flat image - its first block header executed as
+** code - and returns without a word.  .COM/.LGO keep 0, as always.
+*/
 setfla(addr)
 int addr;
 {
   outfcb[FCBFLA - 1] = addr >> 8;
   outfcb[FCBFLA] = addr;
+  if(pagemode) outfcb[FCBFTY] = FTYEXE;
 }
 
 outopen()
@@ -112,14 +123,6 @@ outopen()
 
   mkfcb(outfn, outfcb);
   setfla(cbase);
-  /*
-   * The shell picks the loader from the directory's file type (FCB byte
-   * 11), not from the extension: type 0 or 1 runs flat, type 2 through
-   * the chain-block EXE loader.  A paged EXE left at 0 is run as a flat
-   * image - its first block header executed as code - and returns
-   * without a word.  .COM/.LGO keep 0, as they always have.
-   */
-  if(pagemode) outfcb[FCBFTY] = FTYEXE;
 
   outstage();
   _cpm(19, _commfcb);
