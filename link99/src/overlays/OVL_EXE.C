@@ -57,6 +57,8 @@ extern _cpm();
 extern char *_commbuf, *_commfcb, *_dfltbuf;
 extern int pagemode, pmn, *pmls, *pmle, *pmva, *pmpg;
 
+#include "PUTNUM.C"
+
 /* region iterator (see rraw/rnext) */
 int rk, rcur, rhave;
 int r_ls, r_le, r_va, r_pg;     /* raw region                       */
@@ -172,7 +174,6 @@ exeout()
 {
   int total, done, n, chunk, va, sz, i;
   unsigned winlo, rend, u;
-  char str[8];
 
   /* pass 1: count the blocks; every resident run must end below the
      lowest overlay address (Windows link99 v3.10.2) */
@@ -232,9 +233,10 @@ exeout()
         }
       if(list) {
         fputs("Block page ", stdout);
-        itox(m_pg, str, 3); fputs(str, stdout);
-        itox(va, str, 6);
-        puts2(" at", str);
+        putx(m_pg, 1);
+        fputs(" at ", stdout);
+        putx(va, 4);
+        puts2("", "");
         }
       va = va + chunk;
       n = n - chunk;

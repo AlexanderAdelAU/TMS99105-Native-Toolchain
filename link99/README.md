@@ -6,22 +6,25 @@ The development method deliberately follows the successful FileEdit project: beg
 
 ## What it does now
 
-- Links `.R99` modules and `.LIB` libraries on the SBC into a `.COM`, a `.LGO` (`-G#`), or a **paged `.EXE`** (`-P#`).
-- Output is byte-identical to the Windows `link99` 3.10.3 given the same arguments (checked in simulation for CTEST `.COM`/`.EXE` and for FileEdit's `-P` link, which reproduces the hardware-proven `FILEEDIT.EXE`).
-- Usage: `LINK99 [-B] [-G#] [-L] [-M] [-O#] [-S] program [[-P#] module/library...]`
+- Links `.R99` modules and `.LIB` libraries on the SBC into a `.COM`, a `.LGO` (`-G#`), or a **paged `.EXE`** (`-P#` or an overlay map, `-Y`).
+- Output is byte-identical to the Windows `link99` 3.10.3 given the same arguments (checked in simulation: CTEST `.COM`/`.EXE`, FileEdit's `-P` and `-Y` links, the OVL99 hello demo, and a map using aliases, `:tail` and a guest).
+- Usage: `LINK99 [-B] [-G#] [-L] [-M] [-O#] [-S] [-Ymap] program [[-P#] module/library...]`
   - `-O#` origin of the resident image (hex, default `1000`); `-S` is accepted and ignored, as on Windows.
   - `-P#` puts the module(s) that follow on page `#` (1-15) until a library resets it to 0, as on Windows. Each must `AORG` itself (e.g. `>8000`) and stay inside one 4K segment.
   - The first name may be the output name (`FILEEDIT.EXE`); otherwise the output is named after the first module.
   - Libraries must come **before** the first `-P` module, or a member loaded after the overlays lands above them and the link is refused.
 - `LINK99 @FILE.LNK` reads the arguments from a text file (the shell's command line is 64 characters). Whitespace or line breaks separate them; `#` starts a comment.
 - File names are 8.3 on the SBC: `OVL_PASTE.R99` on a command line opens `OVL_PAST.R99`, so upload such modules under the truncated name.
-- `-Y` (overlay map) is not implemented on the SBC yet.
+- `-Ymap` reads the same OVL99 overlay map as the Windows `link99 -Y` (module page overlay entries; `pub=routine`; `:tail`; `guest`; `window`), places the map modules, renames published entries `~name`, and writes `OVL_TABLE` and the thunks itself (no `OVLGLUE.R99`), with the same checks. Not on the SBC: page spans (`lo-hi`). Limits: 36 modules, 24 overlays, 40 entries.
+- `EXT+offset` references (`@OVL_TABLE+2`) keep their offset (up to 32 per program).
+- Test: `tests/ovly` (`make_test_ovly.ps1`, then `LINK99 @HELLO.LNK` and `HELLO` on the SBC).
 
 ## Memory
 
 - Resident code at `>1000`, heap up to `>8000` (three I/O units).
-- Overlays behind `>8000` (segment 8): `OVL_USAGE` page 2 (usage, `@file`, argument helpers), `OVL_FINAL` page 3 (symbol check, `.COM` output), `OVL_EXE` page 4 (`.EXE` output).
-- Symbol table and the `-P` rows at `>9000-BFFF` (pages 13-15 of segments 9-B); `@file` arguments at its top.
+- Overlays behind `>8000` (segment 8): `OVL_USAGE` page 2 (usage, `@file`, argument helpers, `-M` lines), `OVL_FINAL` page 3 (symbol check, sizes, `.COM` output), `OVL_EXE` page 4 (`.EXE` output), and for `-Y` `OVL_MAP` 5, `OVL_GLUE` 6, `OVL_MAPM` 7, `OVL_CHK` 8, `OVL_TAB` 9.
+- No number formatting or other library code is called only from an overlay: such a member would be placed above the overlays (`include/PUTNUM.C`, `include/OVLYSUB.C` are compiled into each overlay instead).
+- Symbol window `>9000-BFFF` (pages 13-15 of segments 9-B): the `-P` rows and `EXT+offset` table at `>9000`, the `-Y` tables from `>9180` (`include/OVLY.H`), the symbol table, and `@file` arguments at its top.
 - Target image in fifteen 4K banks behind segment C: pages 2-15, then page 1 (60K). Segment D is never touched (shell 6.5 keeps its internal commands on D pages 2-10).
 
 ## Layout

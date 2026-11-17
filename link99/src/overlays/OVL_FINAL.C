@@ -18,6 +18,7 @@
 
 #define NOCCARGC
 #define SYM       4
+#define VAL       2
 #define HIGH    127
 #define XRPLUS   -2
 #define SECTOR  512
@@ -27,7 +28,6 @@
 
 extern getint();
 extern puts2();
-extern show();
 extern poll();
 extern error();
 extern error2();
@@ -40,6 +40,22 @@ extern char outfn[], crfn[];
 extern int list, outfd, instr, addr, lgo, ref, field;
 extern int crfd, xrplus;
 extern unsigned ucl, ucd;
+
+#include "PUTNUM.C"
+
+/*
+** a symbol, for -L
+*/
+show(table)
+char *table;
+{
+  int abs;
+  abs = getint(table + VAL);
+  putx(abs, 4);
+  fputs("' ", stdout);
+  putx(abs + cbase, 4);
+  puts2(" ", table + SYM);
+}
 extern _cpm();
 extern char *_commbuf, *_commfcb, *_dfltbuf;
 
@@ -48,6 +64,12 @@ okay()
   int err;
   char *eplast;
   err = eplast = 0;
+  fputs("   ", stdout);               /* the size phase1 used to print */
+  putx(csize, 4);
+  puts2(" Bytes (hex)", "");
+  fputs("  ", stdout);
+  putu(csize);
+  puts2(" Bytes (dec)", "");
   xrnext = getint(xrfirst);
   epnext = getint(epfirst);
   if(list) puts2("Entry Points:", "");
@@ -58,7 +80,7 @@ okay()
         puts2("-  Redundant: ", xrnext + SYM);
         err = 1;
         }
-      if(list) show(epnext, "");
+      if(list) show(epnext);
       eplast = epnext;
       epnext = getint(epnext);
       continue;
