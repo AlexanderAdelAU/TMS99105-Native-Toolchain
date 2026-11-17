@@ -2,15 +2,11 @@
 ** OVL_USAGE.C -- LINK99 usage/error overlay.
 **
 ** First real LINK99 overlay, following the proven FILEEDIT/FILESTAT model.
-** Publish an explicit assembler entry anchor at >8000 so DREL does not
-** have to infer the callable overlay address from the Small-C symbol.
+** Reached through runusage(), the resident thunk link99 -Y builds from
+** OVLMAP.TXT (runusage=ovlusage:tail): it maps this page and branches here.
 */
 #asm
         AORG    08000H
-        ENT     OVL_USAGE_ENTRY
-
-OVL_USAGE_ENTRY:
-        B       @ovlusage
 #endasm
 
 extern error();

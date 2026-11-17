@@ -14,8 +14,7 @@
 
 R1      EQU     1
 
-        INCL    "OVLDEFS.INC"
-        INCL    "OVLADDR.INC"
+        INCL    "OVLDEFS.INC"           ; IDs; the build checks them against link99
 
         EXT     OVLMGR
         EXT     OVLMGR_INIT
@@ -24,12 +23,6 @@ ovlinit:
         ; OVLMGR_INIT clears CURRENT_PAGE[], CURRENT_ID[] and CUR_WINA_ID.
         ; Keep all overlay activity behind this explicit startup boundary.
         CALL    @OVLMGR_INIT
-        RET
-
-runusage:
-        LI      R1,OVL_USAGE
-        CALL    @OVLMGR
-        CALL    @O_USAGE
         RET
 
 mapsym:
@@ -88,7 +81,6 @@ mapc9:
         RET
 
         ENT     ovlinit
-        ENT     runusage
         ENT     mapsym
         ENT     mapc0
         ENT     mapc1
