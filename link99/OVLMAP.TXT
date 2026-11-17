@@ -5,6 +5,7 @@
 #   module     page  overlay  entries
 #
 # IDs follow first appearance: USAGE=1, CODE0..CODE9=2..11, SYM=12.
+# Pages are per segment: 8/2 (USAGE) and C/2 (CODE0) are different RAM.
 # OVLAPI.A99 maps the code and symbol banks by these numbers, kept in
 # include/OVLDEFS.INC; the build checks them against what link99 built.
 #
@@ -12,18 +13,32 @@
 # to ovlusage(), which reports and exits, so it needs no return frame.
 OVL_USAGE    2   USAGE    runusage=ovlusage:tail
 #
-# The target-code image: ten 4K data banks, each mapped alone through
-# segment 8 by mapc0()..mapc9().  Never entered as code.
-OVL_CODE0    3   CODE0    -
-OVL_CODE1    4   CODE1    -
-OVL_CODE2    5   CODE2    -
-OVL_CODE3    6   CODE3    -
-OVL_CODE4    7   CODE4    -
-OVL_CODE5    8   CODE5    -
-OVL_CODE6    9   CODE6    -
-OVL_CODE7   10   CODE7    -
-OVL_CODE8   11   CODE8    -
-OVL_CODE9   12   CODE9    -
+# The target-code image: ten 4K data banks behind segment C (>C000),
+# pages 2..11, each mapped alone by mapc0()..mapc9().  Never entered as
+# code.  Segment C is free while an EXE runs (the shell moves itself to
+# page 1 and the loader resets every map register on exit), so >8000 is
+# left for this linker's own code overlays.  The marker modules hold no
+# bytes; they only give the rows their segment.
+OVL_CODE0     2   CODE0    -
+OVL_CODE1     3   CODE1    -
+OVL_CODE2     4   CODE2    -
+OVL_CODE3     5   CODE3    -
+OVL_CODE4     6   CODE4    -
+OVL_CODE5     7   CODE5    -
+OVL_CODE6     8   CODE6    -
+OVL_CODE7     9   CODE7    -
+OVL_CODE8    10   CODE8    -
+OVL_CODE9    11   CODE9    -
+guest CODE0
+guest CODE1
+guest CODE2
+guest CODE3
+guest CODE4
+guest CODE5
+guest CODE6
+guest CODE7
+guest CODE8
+guest CODE9
 #
 # The symbol/XREF workspace: three pages at >9000-BFFF, mapped together
 # by mapsym().  It never maps segment 8 and is never entered as code.
@@ -31,3 +46,4 @@ OVL_S9      13   SYM      -
 OVL_S10     14   SYM      -
 OVL_S11     15   SYM      -
 guest SYM
+window 8-12

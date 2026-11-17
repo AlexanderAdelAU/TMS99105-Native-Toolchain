@@ -204,7 +204,7 @@ Need-File ".\SBC99.EXE"
 # ID there must name the overlay link99 gave that number, with the row
 # this linker's memory model depends on:
 #   USAGE  8/2              the one callable overlay
-#   CODEn  8/(3+n)          the ten target-code banks, n = 0..9
+#   CODEn  C/(2+n)          the ten target-code banks, n = 0..9 (guests)
 #   SYM    9/13 A/14 B/15   the symbol workspace (guest: never segment 8)
 Write-Output "`n--- 6. overlay table audit ---"
 $rows = @{}
@@ -219,7 +219,7 @@ foreach($l in ($linkOut -split "\r?\n")) {
 }
 if($rows.Count -eq 0) { throw "link99 printed no overlay table: tools\link99.exe must be 3.10.1 or later (-Y)" }
 $expect = [ordered]@{ USAGE = "8/2" }
-foreach($i in 0..9) { $expect[("CODE{0}" -f $i)] = ("8/{0}" -f (3 + $i)) }
+foreach($i in 0..9) { $expect[("CODE{0}" -f $i)] = ("C/{0}" -f (2 + $i)) }
 $expect["SYM"] = "9/13 A/14 B/15"
 foreach($k in $expect.Keys) {
     if(-not $rows.ContainsKey($k)) { throw "link99 built no row for $k" }
@@ -234,7 +234,7 @@ foreach($k in $expect.Keys) {
     if(-not $defs.ContainsKey($k)) { throw "OVLDEFS.INC has no OVL_$k" }
     if($defs[$k] -ne $rows[$k].Id) { throw ("OVLDEFS.INC says OVL_{0} EQU {1}, but link99 made it ID {2}" -f $k,$defs[$k],$rows[$k].Id) }
 }
-Write-Output "Overlay table audit: USAGE 8/2, CODE0-9 8/3..8/12, SYM 9/13 A/14 B/15 (guest); OVLDEFS.INC agrees."
+Write-Output "Overlay table audit: USAGE 8/2, CODE0-9 C/2..C/11, SYM 9/13 A/14 B/15 (guests); OVLDEFS.INC agrees."
 
 # Page budget for the callable overlay, from link99's -M listing.
 $m = [regex]::Match($linkOut, '(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+OVL_USAGE\s*$')
@@ -256,7 +256,7 @@ if(Test-Path -LiteralPath $MonitorDir -PathType Container) {
 Write-Output ""
 Write-Output "LINK99 FileEdit-style overlay build complete."
 Write-Output "OVL_USAGE: ID 1, virtual segment 8, physical page 2"
-Write-Output "CODEBANKS: pages 3..12 mapped through segment 8"
+Write-Output "CODEBANKS: pages 2..11 mapped through segment C (>C000)"
 Write-Output "SYMBOLS:   pages 13..15 mapped through segments 9..11"
 Write-Output "Deliverable: .\dist\LINK99.EXE"
 Write-Output ("Deployed: " + $Deployed)
