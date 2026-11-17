@@ -1,0 +1,12 @@
+# FILEEDIT.LNK -- on the SBC:  LINK99 @FILEEDIT.LNK
+# FILESTAT is named first: it carries the entry, which must land at
+# >1000.  The rest of FileEdit's resident code comes from FILEEDIT.LIB,
+# the runtime from IOLIB99.LIB - libraries, so the SBC needs few files.
+# The libraries come before the overlays, so every member is placed below
+# them.  OVL_PASTE and OVL_NAMEIO keep their long names here and in the
+# map; the SBC opens them as OVL_PAST.R99 and OVL_NAME.R99.
+-O1000 -S -YFEMAP.TXT FILEEDIT.EXE
+FILESTAT.R99
+FILEEDIT.LIB IOLIB99.LIB CLIB99.LIB
+OVL_WORD.R99 OVL_CHAR.R99 OVL_RPT.R99 OVL_VIEW.R99 OVL_EDIT.R99
+OVL_PASTE.R99 OVL_NAMEIO.R99
