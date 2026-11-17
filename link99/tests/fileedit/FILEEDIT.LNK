@@ -1,12 +1,12 @@
 # FILEEDIT.LNK -- on the SBC:  LINK99 @FILEEDIT.LNK
-# The same arguments fileedit\make_SBC_FileEdit99.ps1 gives the Windows
-# link99, with the map renamed FEMAP.TXT.  OVL_NAMEIO and OVL_PASTE keep
-# their long names here and in the map; the SBC opens them as the 8.3
-# files OVL_NAME.R99 and OVL_PAST.R99.
+# FILESTAT is named first: it carries the entry, which must land at
+# >1000.  The rest of FileEdit's resident code comes from FILEEDIT.LIB,
+# the runtime from IOLIB99.LIB - libraries, so the SBC needs few files.
+# The libraries come before the overlays, so every member is placed below
+# them.  OVL_PASTE and OVL_NAMEIO keep their long names here and in the
+# map; the SBC opens them as OVL_PAST.R99 and OVL_NAME.R99.
 -O1000 -S -YFEMAP.TXT FILEEDIT.EXE
-FILESTAT.R99 FILEIO.R99 FILEDATA.R99 TERMIO.R99 CONRX.R99 EBMAP.R99
-EDITBUF.R99 VIEWCTL.R99 EDITCTL.R99 EDITMENU.R99 OVLMGR.R99 OVCALL.R99
-CALL.R99 IOCORE.R99 IOOPEN.R99 IOREAD.R99 IOWRITE.R99 CBDOS.R99
+FILESTAT.R99
+FILEEDIT.LIB IOLIB99.LIB CLIB99.LIB
 OVL_WORD.R99 OVL_CHAR.R99 OVL_RPT.R99 OVL_VIEW.R99 OVL_EDIT.R99
 OVL_PASTE.R99 OVL_NAMEIO.R99
-CLIB99.LIB
