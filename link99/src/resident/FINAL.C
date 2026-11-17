@@ -17,6 +17,8 @@
 #define FCBSIZ   36
 #define FCBLCNT  35
 #define FCBFLA   17
+#define FCBFTY   11             /* directory file type: the shell runs */
+#define FTYEXE    2             /* type 2 through its paged EXE loader */
 
 extern getint();
 extern puts2();
@@ -35,6 +37,7 @@ extern int crfd, xrplus;
 extern unsigned ucl, ucd;
 extern _cpm();
 extern char *_commbuf, *_commfcb, *_dfltbuf;
+extern int pagemode;
 
 int outcnt, outerr;
 char outfcb[40];
@@ -109,6 +112,14 @@ outopen()
 
   mkfcb(outfn, outfcb);
   setfla(cbase);
+  /*
+   * The shell picks the loader from the directory's file type (FCB byte
+   * 11), not from the extension: type 0 or 1 runs flat, type 2 through
+   * the chain-block EXE loader.  A paged EXE left at 0 is run as a flat
+   * image - its first block header executed as code - and returns
+   * without a word.  .COM/.LGO keep 0, as they always have.
+   */
+  if(pagemode) outfcb[FCBFTY] = FTYEXE;
 
   outstage();
   _cpm(19, _commfcb);
