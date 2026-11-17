@@ -234,8 +234,8 @@ There are still **manual module/page choices** in `OVLMAP.TXT`.
 The tools do not automatically split a large C function, move individual
 functions between modules, group frequently calling functions, or
 synthesize arbitrary cross-overlay relocations. In the tested build,
-`OVL_VIEW` and `OVL_EDIT` had only 26 and 36 safe bytes free,
-respectively. Additional features may require intentionally splitting
+`OVL_VIEW` and `OVL_EDIT` had only 90 and 100 bytes free of their
+4K pages. Additional features may require intentionally splitting
 modules or assigning new pages.
 
 **Proposed next phase (not implemented):** extend the build tooling to
