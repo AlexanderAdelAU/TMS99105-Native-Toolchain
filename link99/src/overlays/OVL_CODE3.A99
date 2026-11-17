@@ -1,8 +1,10 @@
-; OVL_CODE3.A99 -- scratch target-code bank marker
+; OVL_CODE3.A99 -- target-code bank 3 marker
+;
+; Gives link99 -Y the bank's segment (>C000) for its OVL_TABLE row.  It
+; holds NO bytes: the shell loader refuses EXE data at >C000 and above,
+; and the bank is only ever written by LINK99 at run time.
 
-        AORG    08000H
+        AORG    0C000H
 C3:
-        WORD    0
-
         ENT     C3
         END

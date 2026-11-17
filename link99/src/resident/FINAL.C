@@ -1,9 +1,9 @@
 /*
 ** FINAL.C -- LINK99 resident final pass.
 **
-** Phase 2 must be resident because the target code image is now stored
-** in banked pages mapped through >8000.  Executing phase2 from the same
-** window would replace its own code whenever it reads a target-code bank.
+** The target code image is stored in banked pages mapped through >C000
+** (segment C), so phase 2 no longer has to stay resident to read it: it
+** could run from an overlay at >8000.
 */
 #include <stdio.h>
 #include "rel99.h"

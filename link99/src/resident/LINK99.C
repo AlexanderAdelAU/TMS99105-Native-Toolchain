@@ -135,12 +135,13 @@
 **
 ** The target program image is no longer kept in the malloc heap and is
 ** never spilled to .O$.  It is stored in banked 4K pages mapped through
-** the same segment-8 overlay window.  Resident code maps the needed page
+** segment C (>C000), which is free while an EXE runs; >8000 is left for
+** this linker's own code overlays.  Resident code maps the needed page
 ** before each code byte/word access.
 */
-#define CODEWIN   0x8000
+#define CODEWIN   0xC000	/* segment C: free while an EXE runs */
 #define CODEMASK  0x0FFF
-#define CODEBANKS 10		/* pages 3..12, bank numbers 0..9 */
+#define CODEBANKS 10		/* pages 2..11 behind segment C, banks 0..9 */
 #define CODEMAX   0xA000	/* documentation only: 10 x 4K bytes */
 #define SYMWIN    0x9000
 #define SYMSIZE   0x3000	/* fixed symbol/XREF table window: >9000-BFFF */
