@@ -1,0 +1,7 @@
+# HELLOMAP.TXT -- overlay map for the OVL99 hello demo, the SBC LINK99 -Y test.
+# The same map the Windows link99 -Y reads (see make_test_ovly.ps1).
+#
+#   module     page  overlay  entries
+OVLHELLO      4     GREET    hello greet
+OVLGRET2      6     GREET    shout
+OVLBYE        5     BYE      farewell count

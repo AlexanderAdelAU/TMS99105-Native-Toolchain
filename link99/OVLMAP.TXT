@@ -5,7 +5,8 @@
 #   module     page  overlay  entries
 #
 # IDs follow first appearance: USAGE=1, CODE0..CODE9=2..11, SYM=12,
-# FINAL=13, EXE=14, CODE10..CODE14=15..19.
+# FINAL=13, EXE=14, CODE10..CODE14=15..19, MAP=20, GLUE=21, MAPM=22,
+# CHK=23, TAB=24.
 # Pages are per segment: 8/2 (USAGE) and C/2 (CODE0) are different RAM.
 # OVLAPI.A99 maps the code and symbol banks by these numbers, kept in
 # include/OVLDEFS.INC; the build checks them against what link99 built.
@@ -15,7 +16,7 @@
 # :tail (no OVCALL frame; this linker has no OVCALL).  runusage() maps
 # USAGE and branches to ovlusage(), which reports and exits; rdargs()
 # reads a LINK99 @file before the link starts.
-OVL_USAGE    2   USAGE    runusage=ovlusage:tail rdargs:tail getsw:tail pgnum:tail outname:tail openref:tail
+OVL_USAGE    2   USAGE    runusage=ovlusage:tail rdargs:tail getsw:tail pgnum:tail outname:tail openref:tail monmod:tail
 #
 # The target-code image: fifteen 4K data banks behind segment C (>C000),
 # banks 0..13 on pages 2..15 and bank 14 on page 1, each mapped alone by
@@ -71,4 +72,13 @@ guest CODE11
 guest CODE12
 guest CODE13
 guest CODE14
+#
+# -Y, five pages because Small-C's code is large: OVL_MAP and OVL_MAPM read
+# the map, OVL_MAP renames entries as map modules load, OVL_GLUE writes
+# OVL_TABLE and the thunks, OVL_CHK checks the result, OVL_TAB fills the table.
+OVL_MAP      5   MAP      ovopen:tail ovline:tail ovfind:tail ovloaded:tail ovrename:tail ovtilde:tail
+OVL_GLUE     6   GLUE     ovemit:tail ovmisc:tail
+OVL_MAPM     7   MAPM     ovmod:tail
+OVL_CHK      8   CHK      ovcheck:tail
+OVL_TAB      9   TAB      ovtable:tail
 window 8-12

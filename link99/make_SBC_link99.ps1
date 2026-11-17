@@ -74,6 +74,11 @@ Need-File (Join-Path $SrcOverlay  "OVL_USAGE.C")
 Need-File (Join-Path $SrcResident "FINAL.C")
 Need-File (Join-Path $SrcOverlay  "OVL_FINAL.C")
 Need-File (Join-Path $SrcOverlay  "OVL_EXE.C")
+Need-File (Join-Path $SrcOverlay  "OVL_MAP.C")
+Need-File (Join-Path $SrcOverlay  "OVL_GLUE.C")
+Need-File (Join-Path $SrcOverlay  "OVL_MAPM.C")
+Need-File (Join-Path $SrcOverlay  "OVL_CHK.C")
+Need-File (Join-Path $SrcOverlay  "OVL_TAB.C")
 foreach($i in 0..14) { Need-File (Join-Path $SrcOverlay ("OVL_CODE{0}.A99" -f $i)) }
 foreach($f in @("OVL_S9.A99","OVL_S10.A99","OVL_S11.A99")) { Need-File (Join-Path $SrcOverlay $f) }
 Need-File (Join-Path $IncludeDir  "OVLDEFS.INC")
@@ -139,6 +144,11 @@ Compile-Mod  "OVL_USAGE"
 Compile-Mod  "FINAL"
 Compile-Mod  "OVL_FINAL"
 Compile-Mod  "OVL_EXE"
+Compile-Mod  "OVL_MAP"
+Compile-Mod  "OVL_GLUE"
+Compile-Mod  "OVL_MAPM"
+Compile-Mod  "OVL_CHK"
+Compile-Mod  "OVL_TAB"
 
 Assemble "LINK99"
 Assemble "GETREL"
@@ -146,6 +156,11 @@ Assemble "OVL_USAGE"
 Assemble "FINAL"
 Assemble "OVL_FINAL"
 Assemble "OVL_EXE"
+Assemble "OVL_MAP"
+Assemble "OVL_GLUE"
+Assemble "OVL_MAPM"
+Assemble "OVL_CHK"
+Assemble "OVL_TAB"
 foreach($i in 0..14) { Assemble ("OVL_CODE{0}" -f $i) }
 Assemble "OVL_S9"
 Assemble "OVL_S10"
@@ -187,8 +202,8 @@ Assemble "OVLAPI"
 # The libraries come BEFORE the overlays so every member is placed below
 # them: a resident module is placed at cbase + its place in the link, and
 # one loaded after the overlays would sit above them by their size (link99
-# refuses that).  The second listing must find nothing; OVLAPI.A99 names
-# the members only the overlays call.  No -P: the pages come from OVLMAP.TXT.
+# refuses that).  The second listing must find nothing: no overlay calls a
+# library member the resident code does not (PUTNUM.C, hexarg).  No -P: the pages come from OVLMAP.TXT.
 $LinkArgs = @(
     "-O1000","-M","-S","-YOVLMAP.TXT","SBC99.EXE",
     "LINK99.R99","GETREL.R99","FINAL.R99","OVLMGR.R99","OVLAPI.R99",
@@ -219,6 +234,11 @@ Need-File ".\SBC99.EXE"
 #   USAGE  8/2              callable: usage message and @file reader
 #   FINAL  8/3              callable: symbol check, COM/LGO output
 #   EXE    8/4              callable: paged EXE output
+#   MAP    8/5              callable: -Y map reader, entry renaming
+#   GLUE   8/6              callable: -Y table, thunks and checks
+#   MAPM   8/7              callable: -Y map lines
+#   CHK    8/8              callable: -Y checks at the end
+#   TAB    8/9              callable: -Y OVL_TABLE fill and listing
 #   CODEn  C/(2+n)          the target-code banks, n = 0..13 (guests),
 #   CODE14 C/1              and bank 14 on the shell's spare COM page
 #   SYM    9/13 A/14 B/15   the symbol workspace (guest: never segment 8)
@@ -234,7 +254,7 @@ foreach($l in ($linkOut -split "\r?\n")) {
     Write-Output ("  " + $l.Trim())
 }
 if($rows.Count -eq 0) { throw "link99 printed no overlay table: tools\link99.exe must be 3.10.1 or later (-Y)" }
-$expect = [ordered]@{ USAGE = "8/2"; FINAL = "8/3"; EXE = "8/4" }
+$expect = [ordered]@{ USAGE = "8/2"; FINAL = "8/3"; EXE = "8/4"; MAP = "8/5"; GLUE = "8/6"; MAPM = "8/7"; CHK = "8/8"; TAB = "8/9" }
 foreach($i in 0..13) { $expect[("CODE{0}" -f $i)] = ("C/{0}" -f (2 + $i)) }
 $expect["CODE14"] = "C/1"
 $expect["SYM"] = "9/13 A/14 B/15"
@@ -251,10 +271,10 @@ foreach($k in $expect.Keys) {
     if(-not $defs.ContainsKey($k)) { throw "OVLDEFS.INC has no OVL_$k" }
     if($defs[$k] -ne $rows[$k].Id) { throw ("OVLDEFS.INC says OVL_{0} EQU {1}, but link99 made it ID {2}" -f $k,$defs[$k],$rows[$k].Id) }
 }
-Write-Output "Overlay table audit: USAGE 8/2, FINAL 8/3, EXE 8/4, CODE0-13 C/2..C/15, CODE14 C/1, SYM 9/13 A/14 B/15 (guests); OVLDEFS.INC agrees."
+Write-Output "Overlay table audit: USAGE 8/2, FINAL 8/3, EXE 8/4, MAP 8/5, GLUE 8/6, MAPM 8/7, CHK 8/8, TAB 8/9, CODE0-13 C/2..C/15, CODE14 C/1, SYM 9/13 A/14 B/15 (guests); OVLDEFS.INC agrees."
 
 # Page budget for the callable overlays, from link99's -M listing.
-foreach($ov in @("OVL_USAGE","OVL_FINAL","OVL_EXE")) {
+foreach($ov in @("OVL_USAGE","OVL_FINAL","OVL_EXE","OVL_MAP","OVL_GLUE","OVL_MAPM","OVL_CHK","OVL_TAB")) {
     $m = [regex]::Match($linkOut, ('(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+{0}\s*$' -f $ov))
     if(-not $m.Success) { throw "link99 listed no size for $ov" }
     $used = [Convert]::ToInt32($m.Groups[1].Value,16)
@@ -277,6 +297,11 @@ Write-Output "LINK99 FileEdit-style overlay build complete."
 Write-Output "OVL_USAGE: ID 1, virtual segment 8, physical page 2"
 Write-Output "OVL_FINAL: ID 13, virtual segment 8, physical page 3"
 Write-Output "OVL_EXE:   ID 14, virtual segment 8, physical page 4"
+Write-Output "OVL_MAP:   ID 20, virtual segment 8, physical page 5"
+Write-Output "OVL_GLUE:  ID 21, virtual segment 8, physical page 6"
+Write-Output "OVL_MAPM:  ID 22, virtual segment 8, physical page 7"
+Write-Output "OVL_CHK:   ID 23, virtual segment 8, physical page 8"
+Write-Output "OVL_TAB:   ID 24, virtual segment 8, physical page 9"
 Write-Output "CODEBANKS: pages 2..15 and 1 mapped through segment C (>C000)"
 Write-Output "SYMBOLS:   pages 13..15 mapped through segments 9..11"
 Write-Output "Deliverable: .\dist\LINK99.EXE"

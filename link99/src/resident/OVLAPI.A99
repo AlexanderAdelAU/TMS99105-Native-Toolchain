@@ -19,14 +19,6 @@ R1      EQU     1
         EXT     OVLMGR
         EXT     OVLMGR_INIT
 
-; Library routines that only the overlays call (getsw).  Naming
-; them here makes the libraries load them with the resident image, so
-; they are placed below the overlays: a member pulled in after the
-; overlays is placed above them, by their size, and link99 refuses a
-; resident module that reaches the overlay window.
-        EXT     xtoi
-LIBKEEP:                                ; never executed
-        B       @xtoi
 
 ovlinit:
         ; OVLMGR_INIT clears CURRENT_PAGE[], CURRENT_ID[] and CUR_WINA_ID.

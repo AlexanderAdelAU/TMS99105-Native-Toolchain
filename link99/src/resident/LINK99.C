@@ -84,6 +84,7 @@
 #include <stdio.h>
 #include "notice.h"
 #include "rel99.h"
+#include "OVLY.H"
 
 #define NODEBUG			/* don't compile debug displays */
 #define NOCCARGC		/* don't pass arg counts to functions */
@@ -302,8 +303,21 @@ int *pmls;		/* linear start      \  four MAXPM-word arrays at    */
 int *pmle;		/* linear end         | the bottom of the symbol     */
 int *pmva;		/* load address       | window (getmem), not in      */
 int *pmpg;		/* page              /  resident RAM                 */
+#define XAMAX 32
+int xan;		/* EXT+offset references kept (xadd)               */
+int *xal, *xav;		/* their locations and offsets: XAMAX words each,  */
+			/* after the -P rows in the symbol window          */
 int rargv;		/* argv built by rdargs() from an @file            */
 char *symtop;		/* top of the symbol table: below rdargs' text     */
+
+/*
+** -Y overlay map (OVL_MAP.C reads it, OVL_GLUE.C writes the glue).  The
+** tables are in the symbol window (OVLY.H); only these are resident.
+*/
+int ovlmode;		/* -Y given                                        */
+char ovmapfn[NAMESIZE];	/* the map file                                    */
+int ovcur;		/* map index of the module loading, or -1          */
+int ovpg;		/* its page, from the map (set by ovfind)          */
 
 int xrefs;      /* an EXT "XREFS" marker has been seen           */
 int xrsym;      /* the xr entry the following CHAIN items feed    */
@@ -337,6 +351,10 @@ main(argc,argv) int argc, *argv; {
     }
   getsw(argc, argv);		/* fetch and remember switches */
   getmem();			/* acquire maximum memory buffer */
+  if(ovlmode) {			/* the -Y overlay map (OVL_MAP.C) */
+    ovopen();
+    while(ovline()) if(!ovmisc()) ovmod();
+    }
   phase1(argc, argv);		/* load and link */
   if(!okay()) abort(7);		/* phase 2, from overlays */
   if(pagemode) exeout(); else comout();
@@ -353,7 +371,10 @@ getmem() {
   pmle = pmls + MAXPM;
   pmva = pmle + MAXPM;
   pmpg = pmva + MAXPM;
-  buffer = pmpg + MAXPM;
+  xal = pmpg + MAXPM;
+  xav = xal + XAMAX;
+  buffer = xav + XAMAX;		/* OVLY.H's OVT: keep them in step */
+  if(ovlmode) buffer = buffer + OVTABSZ;	/* the -Y tables, OVLY.H */
   bnext = 0;
   cbank = -1;
   if(!symtop) symtop = SYMWIN + SYMSIZE;	/* rdargs may have taken the top */
@@ -488,6 +509,7 @@ int value;
 */
 load() {
   char str[12], *offloc;
+  int ren, ovf, ovt;
   offloc = -1;
   epprev = epfirst;
   xrprev = xrfirst;
@@ -546,6 +568,8 @@ load() {
 
       case  CHAIN: if(!xrsym) error("- CHAIN without XCHAIN");
                    field = pglin(field);
+                   ovf = codegetw(field);	/* EXT+n: the n */
+                   if(ovf) xadd(field, ovf);
                    codeputw(field, getint(xrsym + VAL));
                    putint(xrsym + VAL, field);
                    break;
@@ -554,19 +578,20 @@ load() {
                      field = field - cbase;	/* resolve() adds it back */
                      type = ABS;
                      }
+                   ren = NO;
+                   if(ovcur >= 0) ren = ovrename();	/* -Y: foo -> ~foo */
+                   ovf = field; ovt = type;
                    newsym(&epprev, epfirst, "ep");
+                   if(ren) {			/* alias: ~copy as well */
+                     field = ovf; type = ovt;
+                     ovtilde();
+                     newsym(&epprev, epfirst, "ep");
+                     }
                    break;
 
       case  PSIZE: cmod = cloc;
                    pmorg = 0;
-                   if(monitor) {
-                     itox(field, str, 8);
-                     fputs(str, stdout); fputs(" Bytes at", stdout);
-                     itox(cloc,  str, 6);
-                     fputs(str, stdout); fputs("'", stdout);
-                     itox(cloc+cbase,  str, 6);
-                     fputs(str, stdout); puts2(" ", modname);
-                     }
+                   if(monitor) monmod();	/* OVL_USAGE */
                    codeneed(field);
                    break;
 
@@ -703,8 +728,10 @@ phase1(argc, argv) int argc, *argv; {
    * local char array written to its last element needs the same slack.
    */
   char sz[12];
-  int i, lib, eof, pgprev;
+  int i, i2, lib, eof, pgprev, pgwas, ovdone;
   eof = EOF;
+  ovcur = -1;
+  ovdone = NO;
   cdisk = CODEMAX;			/* old disk-spill limit: no .O$ */
   if(lgo) instr = RET;			/* load and go format */
   else {instr = JMP; if(!oflag) cbase = COMBASE;}	/* COM file format */
@@ -727,6 +754,7 @@ phase1(argc, argv) int argc, *argv; {
          lib = YES;
     else lib = NO;
     if(lib) if(!pgprev) curpage = 0;	/* as on Windows */
+    pgwas = pgprev;
     pgprev = NO;
     if(!*outfn) {			/* first file name */
       if(lgo) newfn(outfn, infn, LGOEXT);
@@ -741,8 +769,20 @@ phase1(argc, argv) int argc, *argv; {
       search();
       }
     else {
+      i2 = -1;
+      if(ovlmode) i2 = ovfind(infn);	/* a module in the -Y map? */
+      if(i2 >= 0) {
+        if(pgwas) error2("- -P and the map both place ", infn);
+        if(!ovdone) {			/* glue: resident, below them */
+          pgmod = 0;
+          ovemit();
+          ovdone = YES;
+          }
+        pgmod = ovpg;
+        }
+      else pgmod = curpage;
+      ovcur = i2;
       status("Load   ", infn);
-      pgmod = curpage;
       inrel = open(infn, "r");
       if(!inrel) error2(infn, " - cannot open");
       ifilelbuf();                 /* new REL file: discard GETREL byte buffer */
@@ -751,7 +791,13 @@ phase1(argc, argv) int argc, *argv; {
       load();				/* load module */
       link();				/* link previous modules */
       close(inrel);			/* must close */
+      if(ovcur >= 0) ovloaded();
+      ovcur = -1;
       }
+    }
+  if(ovlmode) {			/* check the map, fill OVL_TABLE */
+    ovcheck();
+    ovtable();
     }
   if(!*outfn) runusage();
   pgmod = 0;
@@ -784,8 +830,8 @@ phase1(argc, argv) int argc, *argv; {
   close(crfd);
   crfd = open(crfn, "r");
   if(!crfd) error2("- cannot reopen ", crfn);
-  itox(csize, sz, 8); status(sz, " Bytes (hex)");
-  itou(csize, sz, 8); status(sz, " Bytes (dec)");
+  /* the size is printed by okay() (OVL_FINAL): no number formatting
+     is resident, so no library member is placed above the overlays */
   /*
    * The LAST statement of phase1.  If [end1] prints and [p1] does not,
    * the crash is in the RET itself - XOP 7 taking a corrupted return
@@ -836,8 +882,29 @@ resolve() {
       puts2(" ", xrnext + SYM);
       }
 #endif
+    ucl = xr;
     xr = codexchw(xr, ep);      /* read the link, plant the value */
+    if(xan) xfix(ucl, ep);
     } while(xr);
+  }
+
+/*
+** EXT+offset (@OVL_TABLE+2): the assembler leaves the offset in the
+** reference's slot, but the XREFS chain is threaded through the slots,
+** so it is kept here, by location, and added back by resolve().  The
+** Windows link99 does the same (3.9.x: "EXT+offset addend").  Rare - a
+** handful per program - so a short table and a linear search.
+*/
+xadd(loc, n) int loc, n; {
+  if(xan >= XAMAX) error("- Too many EXT+offset references");
+  xal[xan] = loc;
+  xav[xan++] = n;
+  }
+
+xfix(loc, v) int loc, v; {
+  int i;
+  for(i = 0; i < xan; ++i)
+    if(xal[i] == loc) codeputw(loc, v + xav[i]);
   }
 
 /*
@@ -908,18 +975,6 @@ seek() {
   inrem = 0;                       /* force getrel() to read a fresh byte */
   }
 
-/*
-** show a symbol
-*/
-show(table, type) char *table, *type; {
-  char str[12];  int abs;
-  itox(abs = getint(table + VAL), str, 8);
-  fputs( str, stdout); fputs("'", stdout);
-  itox(abs + cbase, str, 6);
-  fputs( str, stdout); fputs(" ", stdout);
-  fputs(type, stdout); fputs(" ", stdout);
-  puts2(table + SYM, "");
-  }
 
 /*
 ** seek external reference

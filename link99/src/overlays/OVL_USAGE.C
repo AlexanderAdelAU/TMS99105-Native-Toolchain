@@ -38,18 +38,24 @@
 
 extern error();
 extern error2();
+extern puts2();
 extern getarg();
 extern newfn();
 extern int rargv;
 extern char *symtop;
 extern mapsym();
-extern int lgo, big, list, monitor, oflag, pagemode, crfd;
+extern int lgo, big, list, monitor, oflag, pagemode, crfd, ovlmode;
+extern char ovmapfn[];
+extern int field;
+extern char *cloc, *cbase, modname[];
+
+#include "PUTNUM.C"
 extern char *cbase;
 extern char crfn[];
 
 ovlusage()
 {
-    error("Usage: LINK99 [-B] [-G#] [-L] [-M] [-O#] [-S] program [[-P#] module/library...]  or  LINK99 @file");
+    error("Usage: LINK99 [-B] [-G#] [-L] [-M] [-O#] [-S] [-Ymap] program [[-P#] module/library...]  or  LINK99 @file");
 }
 
 rdargs(name, prog)
@@ -104,19 +110,22 @@ getsw(argc, argv) int argc, *argv; {
     if(arg[0] != '-') continue;			/* skip file names */
     if(toupper(arg[1]) == 'G') {
       lgo = YES;
-      len = xtoi(arg + 2, &b);
-      if(len >= 0 && !arg[len + 2]) cbase = b; else ovlusage();
+      cbase = hexarg(arg);
       }
     else if(toupper(arg[1]) == 'O') {
       oflag = YES;
-      len = xtoi(arg + 2, &b);
-      if(len > 0 && !arg[len + 2]) cbase = b; else ovlusage();
+      cbase = hexarg(arg);
       }
     else if(toupper(arg[1]) == 'P') {
       if(pgnum(arg) < 1) ovlusage();
       pagemode = YES;
       }
     else if(toupper(arg[1]) == 'S') ;	/* Windows compatibility */
+    else if(toupper(arg[1]) == 'Y') {	/* overlay map, OVL_MAP.C */
+      if(!arg[2] || ovlmode) ovlusage();
+      strcpy(ovmapfn, arg + 2);
+      ovlmode = pagemode = YES;
+      }
     else if(toupper(arg[1]) == 'B') big = YES;
     else if(toupper(arg[1]) == 'L') list = YES;
     else if(toupper(arg[1]) == 'M') monitor = YES;
@@ -168,3 +177,37 @@ outname(name) char *name; {
   return NO;
   }
 
+/*
+** -G# / -O#: the hex number after the switch letter.  Not xtoi: a
+** library routine only an overlay calls would be placed above them.
+*/
+hexarg(arg)
+char *arg;
+{
+  int n, c;
+  char *s;
+  s = arg + 2;
+  if(!*s) ovlusage();
+  n = 0;
+  while(c = toupper(*s++)) {
+    if(c >= '0' && c <= '9') c = c - '0';
+    else if(c >= 'A' && c <= 'F') c = c - 'A' + 10;
+    else ovlusage();
+    n = (n << 4) + c;
+  }
+  return n;
+}
+
+/*
+** -M: a module's size and place, at its PSIZE
+*/
+monmod()
+{
+  fputs("  ", stdout);
+  putx(field, 4);
+  fputs(" Bytes at ", stdout);
+  putx(cloc, 4);
+  fputs("' ", stdout);
+  putx(cloc + cbase, 4);
+  puts2(" ", modname);
+}
