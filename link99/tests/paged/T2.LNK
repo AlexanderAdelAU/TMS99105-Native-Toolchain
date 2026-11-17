@@ -1,0 +1,5 @@
+# T2.LNK -- LINK99 @T2.LNK  (same as: LINK99 CTEST IOLIB99.LIB -P2 T2)
+-O1000
+CTEST
+IOLIB99.LIB   # libraries before the first -P module
+-P2 T2

@@ -4,21 +4,29 @@
 #
 #   module     page  overlay  entries
 #
-# IDs follow first appearance: USAGE=1, CODE0..CODE9=2..11, SYM=12.
+# IDs follow first appearance: USAGE=1, CODE0..CODE9=2..11, SYM=12,
+# FINAL=13, EXE=14, CODE10..CODE14=15..19.
 # Pages are per segment: 8/2 (USAGE) and C/2 (CODE0) are different RAM.
 # OVLAPI.A99 maps the code and symbol banks by these numbers, kept in
 # include/OVLDEFS.INC; the build checks them against what link99 built.
 #
-# USAGE is the only callable overlay.  runusage() maps it and branches
-# to ovlusage(), which reports and exits, so it needs no return frame.
-OVL_USAGE    2   USAGE    runusage=ovlusage:tail
+# USAGE, FINAL and EXE are the callable overlays, all entered from
+# resident main() and needing nothing mapped back, so every thunk is
+# :tail (no OVCALL frame; this linker has no OVCALL).  runusage() maps
+# USAGE and branches to ovlusage(), which reports and exits; rdargs()
+# reads a LINK99 @file before the link starts.
+OVL_USAGE    2   USAGE    runusage=ovlusage:tail rdargs:tail getsw:tail pgnum:tail outname:tail openref:tail
 #
-# The target-code image: ten 4K data banks behind segment C (>C000),
-# pages 2..11, each mapped alone by mapc0()..mapc9().  Never entered as
-# code.  Segment C is free while an EXE runs (the shell moves itself to
-# page 1 and the loader resets every map register on exit), so >8000 is
-# left for this linker's own code overlays.  The marker modules hold no
-# bytes; they only give the rows their segment.
+# The target-code image: fifteen 4K data banks behind segment C (>C000),
+# banks 0..13 on pages 2..15 and bank 14 on page 1, each mapped alone by
+# mapc0()..mapc14().  Never entered as code.  The shell lives on page 0
+# of segments C and D; page 1 is its private page for a .COM run, unused
+# while an EXE runs; the BDOS runs with page selection off, so it sees
+# its own page 0 whatever C is mapped to; and the shell resets every map
+# register when the program exits.  Segment D is not used: its pages
+# 2..10 hold the shell's internal commands (SHELL 6.5).  >8000 is left
+# for this linker's own code overlays.  The marker modules hold no bytes;
+# they only give the rows their segment.
 OVL_CODE0     2   CODE0    -
 OVL_CODE1     3   CODE1    -
 OVL_CODE2     4   CODE2    -
@@ -46,4 +54,21 @@ OVL_S9      13   SYM      -
 OVL_S10     14   SYM      -
 OVL_S11     15   SYM      -
 guest SYM
+#
+# Phase 2, called once after the image is built: okay() checks the
+# symbols, then comout() writes a .COM/.LGO or exeout() a paged .EXE.
+OVL_FINAL    3   FINAL    okay:tail comout:tail
+OVL_EXE      4   EXE      exeout:tail
+#
+# Banks 10..14, after the rest so the IDs above keep their numbers.
+OVL_CODE10   12   CODE10   -
+OVL_CODE11   13   CODE11   -
+OVL_CODE12   14   CODE12   -
+OVL_CODE13   15   CODE13   -
+OVL_CODE14    1   CODE14   -
+guest CODE10
+guest CODE11
+guest CODE12
+guest CODE13
+guest CODE14
 window 8-12

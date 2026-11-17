@@ -1,12 +1,18 @@
 /*
-** OVL_FINAL.C -- LINK99 post-phase1 overlay.
+** OVL_FINAL.C -- LINK99 phase 2, the part every output needs.
 **
-** This deliberately contains code that is not needed while phase1 is
-** constructing the target image: symbol consistency checking and phase2
-** output generation.  Moving it out of the resident image gives that RAM
-** back to LINK99's code/symbol buffer while retaining the FILEEDIT/FILESTAT
-** overlay model.
+** okay() checks the symbol table and opens the output; comout() writes
+** a .COM or .LGO image and closes it.  Neither is needed while phase1 builds the image, so they live
+** on their own page behind >8000, reached through the okay and comout
+** thunks link99 -Y builds from OVLMAP.TXT (both :tail - main() calls
+** them and nothing needs mapping back).  A paged EXE is written by
+** OVL_EXE.C instead.  The file primitives they share are resident, in
+** FINAL.C.
 */
+#asm
+        AORG    08000H
+#endasm
+
 #include <stdio.h>
 #include "rel99.h"
 
@@ -14,130 +20,112 @@
 #define SYM       4
 #define HIGH    127
 #define XRPLUS   -2
+#define SECTOR  512
+#define FCBSIZ   36
+#define FCBLCNT  35
+#define FCBFLA   17
 
-#asm
-        AORG    08000H
-        ENT     OVL_FINAL_ENTRY
-OVL_FINAL_ENTRY:
-        B       @ovlfinal
-#endasm
-
-/* resident functions */
 extern getint();
-extern putint();
 extern puts2();
 extern show();
 extern poll();
+extern error();
 extern error2();
-extern xrseek();
-
-/* resident state -- keep the original LINK99 types */
+extern status();
+extern codegetb();
+extern codegetw();
 extern char *xrnext, *epnext, *xrfirst, *epfirst;
-extern char *buffer, *cloc, *cbase, *csize, *goloc, *cdisk;
-extern char outfn[], csfn[], crfn[];
+extern char *cloc, *cbase, *csize, *goloc;
+extern char outfn[], crfn[];
 extern int list, outfd, instr, addr, lgo, ref, field;
-extern int csfd, crfd, xrplus;
+extern int crfd, xrplus;
 extern unsigned ucl, ucd;
+extern _cpm();
+extern char *_commbuf, *_commfcb, *_dfltbuf;
 
-ovlfinal()
+okay()
 {
-    if(!ovlokay()) return 0;
-    ovlphase2();
-    return 1;
-}
-
-ovlokay()
-{
-    int err;
-    char *eplast;
-
-    err = eplast = 0;
-    xrnext = getint(xrfirst);
-    epnext = getint(epfirst);
-    if(list) puts("\nEntry Points:");
-
-    while(1) {
-        poll(1);
-        if(strcmp(xrnext + SYM, epnext + SYM) > 0) {
-            if(epnext == eplast) {
-                puts2("-  Redundant: ", xrnext + SYM);
-                err = 1;
-            }
-            if(list) show(epnext, "");
-            eplast = epnext;
-            epnext = getint(epnext);
-            continue;
+  int err;
+  char *eplast;
+  err = eplast = 0;
+  xrnext = getint(xrfirst);
+  epnext = getint(epfirst);
+  if(list) puts2("Entry Points:", "");
+  while(1) {
+    poll(1);
+    if(strcmp(xrnext + SYM, epnext + SYM) > 0) {
+      if(epnext == eplast) {
+        puts2("-  Redundant: ", xrnext + SYM);
+        err = 1;
         }
-        if(strcmp(xrnext + SYM, epnext + SYM) < 0) {
-            puts2("- Unresolved: ", xrnext + SYM);
-            err = 1;
-            xrnext = getint(xrnext);
-            continue;
-        }
-        if(*(xrnext + SYM) != HIGH) {
-            xrnext = getint(xrnext);
-            continue;
-        }
-        break;
+      if(list) show(epnext, "");
+      eplast = epnext;
+      epnext = getint(epnext);
+      continue;
+      }
+    if(strcmp(xrnext + SYM, epnext + SYM) < 0) {
+      puts2("- Unresolved: ", xrnext + SYM);
+      err = 1;
+      xrnext = getint(xrnext);
+      continue;
+      }
+    if(*(xrnext + SYM) != HIGH) {
+      xrnext = getint(xrnext);
+      continue;
+      }
+    break;
     }
-    if(err) return 0;
-    return 1;
+  if(err) return 0;
+  status("Write  ", outfn);
+  outopen();
+  return 1;
 }
 
-ovlphase2()
+comout()
 {
-    outfd = open(outfn, "w");
-    if(!outfd) error2("- cannot open ", outfn);
-
-    write(outfd, &instr, 1);
+  /*
+   * Normal SBC .COM is a raw TMS9900 image at cbase.  Do not write the
+   * old CP/M/Z80 three-byte JMP prefix; it corrupts word alignment.
+   *
+   * LGO keeps its historical header for now, but bytes/words are emitted
+   * explicitly so host integer byte order cannot leak into the file.
+   */
+  if(lgo) {
+    outbyte(instr);
     addr = cbase + goloc;
-    write(outfd, &addr, 2);
-    if(lgo) {
-        write(outfd, &cbase, 2);
-        write(outfd, &csize, 2);
+    outword(addr);
+    outword(cbase);
+    outword(csize);
     }
-
-    cloc = -1;
-    ovlreadref();
-    while(++cloc < csize) {
-        if(cloc != ref) {
-            ucl = cloc; ucd = cdisk;
-            if(ucl < ucd) field = *(cloc + buffer);
-            else read(csfd, &field, 1);
-            write(outfd, &field, 1);
-            continue;
-        }
-
-        ucl = cloc; ucd = cdisk;
-        if(ucl < ucd) field = getint(cloc + buffer);
-        else read(csfd, &field, 2);
-        field = field + cbase + xrplus;
-        xrplus = 0;
-        write(outfd, &field, 2);
-        ovlreadref();
-        ++cloc;
+  cloc = -1;
+  readref();
+  while(1) {
+    ++cloc;
+    ucl = cloc;
+    ucd = csize;
+    if(ucl >= ucd) break;
+    if(cloc != ref) {
+      field = codegetb(cloc);
+      outbyte(field);
+      continue;
+      }
+    field = codegetw(cloc);
+    field = field + cbase + xrplus;
+    xrplus = 0;
+    outword(field);
+    readref();
+    ++cloc;
     }
-
-    if(ferror(outfd)) error2("- Error Writing ", outfn);
-    close(outfd);
-
-    if(csfd) {
-        if(ferror(csfd)) error2("- Error Reading ", csfn);
-        close(csfd);
-    }
-    if(ferror(crfd)) error2("- Error Reading ", crfn);
-    close(crfd);
+  outdone();
 }
 
-ovlreadref()
+/*
+** close the output and the reference file
+*/
+outdone()
 {
-    read(crfd, &ref, 2);
-    if(ref == XRPLUS) {
-        read(crfd, &xrplus, 2);
-        read(crfd, &ref, 2);
-        if(ref == XRPLUS) {
-            xrplus -= cbase;
-            read(crfd, &ref, 2);
-        }
-    }
+  outclose();
+  if(ferror(crfd)) error2("- Error Reading ", crfn);
+  close(crfd);
+  status("Done   ", outfn);
 }

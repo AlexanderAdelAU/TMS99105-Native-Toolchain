@@ -1,9 +1,10 @@
 /*
-** FINAL.C -- LINK99 resident final pass.
+** FINAL.C -- LINK99 output file primitives, resident.
 **
-** The target code image is stored in banked pages mapped through >C000
-** (segment C), so phase 2 no longer has to stay resident to read it: it
-** could run from an overlay at >8000.
+** Phase 2 itself runs from overlays: okay() and comout() from OVL_FINAL
+** (page 3), exeout() from OVL_EXE (page 4), each called from main().
+** What they share stays here: the output FCB and sector buffer, the
+** byte/word writers and the reference-file reader.
 */
 #include <stdio.h>
 #include "rel99.h"
@@ -38,100 +39,6 @@ extern char *_commbuf, *_commfcb, *_dfltbuf;
 int outcnt, outerr;
 char outfcb[40];
 char outbuf[520];
-
-final()
-{
-  if(!okay()) return 0;
-  status("Write  ", outfn);
-  phase2();
-  status("Done   ", outfn);
-  return 1;
-}
-
-okay()
-{
-  int err;
-  char *eplast;
-
-  err = eplast = 0;
-  xrnext = getint(xrfirst);
-  epnext = getint(epfirst);
-  if(list) puts2("Entry Points:", "");
-
-  while(1) {
-    poll(1);
-    if(strcmp(xrnext + SYM, epnext + SYM) > 0) {
-      if(epnext == eplast) {
-        puts2("-  Redundant: ", xrnext + SYM);
-        err = 1;
-        }
-      if(list) show(epnext, "");
-      eplast = epnext;
-      epnext = getint(epnext);
-      continue;
-      }
-    if(strcmp(xrnext + SYM, epnext + SYM) < 0) {
-      puts2("- Unresolved: ", xrnext + SYM);
-      err = 1;
-      xrnext = getint(xrnext);
-      continue;
-      }
-    if(*(xrnext + SYM) != HIGH) {
-      xrnext = getint(xrnext);
-      continue;
-      }
-    break;
-    }
-  if(err) return 0;
-  return 1;
-}
-
-phase2()
-{
-  outopen();
-
-  /*
-   * Normal SBC .COM is a raw TMS9900 image at cbase.  Do not write the
-   * old CP/M/Z80 three-byte JMP prefix; it corrupts word alignment.
-   *
-   * LGO keeps its historical header for now, but bytes/words are emitted
-   * explicitly so host integer byte order cannot leak into the file.
-   */
-  if(lgo) {
-    outbyte(instr);
-    addr = cbase + goloc;
-    outword(addr);
-    outword(cbase);
-    outword(csize);
-    }
-
-  cloc = -1;
-  readref();
-  while(1) {
-    ++cloc;
-    ucl = cloc;
-    ucd = csize;
-    if(ucl >= ucd) break;
-
-    if(cloc != ref) {
-      field = codegetb(cloc);
-      outbyte(field);
-      continue;
-      }
-
-    field = codegetw(cloc);
-    field = field + cbase + xrplus;
-    xrplus = 0;
-    outword(field);
-    readref();
-    ++cloc;
-    }
-
-  outclose();
-
-  if(ferror(crfd)) error2("- Error Reading ", crfn);
-  close(crfd);
-}
 
 upper(c)
 char c;

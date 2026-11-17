@@ -5,7 +5,8 @@ Set-StrictMode -Version 2.0
 #   project tree is authoritative; build\ is disposable;
 #   the host link99 (3.10.1 or later) reads OVLMAP.TXT (-Y): it places the
 #   overlay and bank modules on their pages and builds OVL_TABLE and the
-#   resident runusage thunk.  No DREL step and no generated include file.
+#   resident thunks (runusage, getsw, okay, exeout and the rest).  No DREL step and no
+#   generated include file.
 
 $ProjectRoot = $PSScriptRoot
 $ToolsDir    = Join-Path $ProjectRoot "tools"
@@ -69,9 +70,11 @@ foreach($f in @(
 Need-File (Join-Path $SrcResident "LINK99.C")
 Need-File (Join-Path $SrcResident "OVLMGR.A99")
 Need-File (Join-Path $SrcResident "OVLAPI.A99")
-Need-File (Join-Path $SrcResident "FINAL.C")
 Need-File (Join-Path $SrcOverlay  "OVL_USAGE.C")
-foreach($i in 0..9) { Need-File (Join-Path $SrcOverlay ("OVL_CODE{0}.A99" -f $i)) }
+Need-File (Join-Path $SrcResident "FINAL.C")
+Need-File (Join-Path $SrcOverlay  "OVL_FINAL.C")
+Need-File (Join-Path $SrcOverlay  "OVL_EXE.C")
+foreach($i in 0..14) { Need-File (Join-Path $SrcOverlay ("OVL_CODE{0}.A99" -f $i)) }
 foreach($f in @("OVL_S9.A99","OVL_S10.A99","OVL_S11.A99")) { Need-File (Join-Path $SrcOverlay $f) }
 Need-File (Join-Path $IncludeDir  "OVLDEFS.INC")
 Need-File $OverlayMap
@@ -132,14 +135,18 @@ foreach($raw in (Get-Content -LiteralPath $OverlayMap)) {
 Write-Output "`n--- 3. compile resident + overlay C ---"
 Compile-Main "LINK99"
 Compile-Mod  "GETREL"
-Compile-Mod  "FINAL"
 Compile-Mod  "OVL_USAGE"
+Compile-Mod  "FINAL"
+Compile-Mod  "OVL_FINAL"
+Compile-Mod  "OVL_EXE"
 
 Assemble "LINK99"
 Assemble "GETREL"
-Assemble "FINAL"
 Assemble "OVL_USAGE"
-foreach($i in 0..9) { Assemble ("OVL_CODE{0}" -f $i) }
+Assemble "FINAL"
+Assemble "OVL_FINAL"
+Assemble "OVL_EXE"
+foreach($i in 0..14) { Assemble ("OVL_CODE{0}" -f $i) }
 Assemble "OVL_S9"
 Assemble "OVL_S10"
 Assemble "OVL_S11"
@@ -175,14 +182,20 @@ Write-Output "`n--- 4. assemble resident overlay framework ---"
 Assemble "OVLMGR"
 Assemble "OVLAPI"
 
-# Match FILEEDIT's proven ordering: application resident objects, explicit
-# resident I/O/runtime objects, overlay page objects, then C/string libraries.
-# No -P: the pages come from OVLMAP.TXT.
+# Application resident objects, explicit resident I/O/runtime objects, the
+# C/string libraries, the overlay page objects, then the libraries again.
+# The libraries come BEFORE the overlays so every member is placed below
+# them: a resident module is placed at cbase + its place in the link, and
+# one loaded after the overlays would sit above them by their size (link99
+# refuses that).  The second listing must find nothing; OVLAPI.A99 names
+# the members only the overlays call.  No -P: the pages come from OVLMAP.TXT.
 $LinkArgs = @(
     "-O1000","-M","-S","-YOVLMAP.TXT","SBC99.EXE",
     "LINK99.R99","GETREL.R99","FINAL.R99","OVLMGR.R99","OVLAPI.R99",
     "CALL.R99","IOCORE.R99","IOOPEN.R99","IOREAD.R99","IOSEEK.R99","IOWRITE.R99","CBDOS.R99"
 )
+$LinkArgs += "CLIB99.LIB"
+$LinkArgs += "STRLIB99.LIB"
 $LinkArgs += $OvlFiles
 $LinkArgs += "CLIB99.LIB"
 $LinkArgs += "STRLIB99.LIB"
@@ -203,8 +216,11 @@ Need-File ".\SBC99.EXE"
 # OVLAPI.A99 maps the banks by ID through include\OVLDEFS.INC, so every
 # ID there must name the overlay link99 gave that number, with the row
 # this linker's memory model depends on:
-#   USAGE  8/2              the one callable overlay
-#   CODEn  C/(2+n)          the ten target-code banks, n = 0..9 (guests)
+#   USAGE  8/2              callable: usage message and @file reader
+#   FINAL  8/3              callable: symbol check, COM/LGO output
+#   EXE    8/4              callable: paged EXE output
+#   CODEn  C/(2+n)          the target-code banks, n = 0..13 (guests),
+#   CODE14 C/1              and bank 14 on the shell's spare COM page
 #   SYM    9/13 A/14 B/15   the symbol workspace (guest: never segment 8)
 Write-Output "`n--- 6. overlay table audit ---"
 $rows = @{}
@@ -218,8 +234,9 @@ foreach($l in ($linkOut -split "\r?\n")) {
     Write-Output ("  " + $l.Trim())
 }
 if($rows.Count -eq 0) { throw "link99 printed no overlay table: tools\link99.exe must be 3.10.1 or later (-Y)" }
-$expect = [ordered]@{ USAGE = "8/2" }
-foreach($i in 0..9) { $expect[("CODE{0}" -f $i)] = ("C/{0}" -f (2 + $i)) }
+$expect = [ordered]@{ USAGE = "8/2"; FINAL = "8/3"; EXE = "8/4" }
+foreach($i in 0..13) { $expect[("CODE{0}" -f $i)] = ("C/{0}" -f (2 + $i)) }
+$expect["CODE14"] = "C/1"
 $expect["SYM"] = "9/13 A/14 B/15"
 foreach($k in $expect.Keys) {
     if(-not $rows.ContainsKey($k)) { throw "link99 built no row for $k" }
@@ -234,14 +251,16 @@ foreach($k in $expect.Keys) {
     if(-not $defs.ContainsKey($k)) { throw "OVLDEFS.INC has no OVL_$k" }
     if($defs[$k] -ne $rows[$k].Id) { throw ("OVLDEFS.INC says OVL_{0} EQU {1}, but link99 made it ID {2}" -f $k,$defs[$k],$rows[$k].Id) }
 }
-Write-Output "Overlay table audit: USAGE 8/2, CODE0-9 C/2..C/11, SYM 9/13 A/14 B/15 (guests); OVLDEFS.INC agrees."
+Write-Output "Overlay table audit: USAGE 8/2, FINAL 8/3, EXE 8/4, CODE0-13 C/2..C/15, CODE14 C/1, SYM 9/13 A/14 B/15 (guests); OVLDEFS.INC agrees."
 
-# Page budget for the callable overlay, from link99's -M listing.
-$m = [regex]::Match($linkOut, '(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+OVL_USAGE\s*$')
-if(-not $m.Success) { throw "link99 listed no size for OVL_USAGE" }
-$used = [Convert]::ToInt32($m.Groups[1].Value,16)
-Write-Output ("  OVL_USAGE  used {0,4}  free {1,4}" -f $used,(0x1000 - $used))
-if($used -gt 0x1000) { throw "OVL_USAGE exceeds its 4K page" }
+# Page budget for the callable overlays, from link99's -M listing.
+foreach($ov in @("OVL_USAGE","OVL_FINAL","OVL_EXE")) {
+    $m = [regex]::Match($linkOut, ('(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+{0}\s*$' -f $ov))
+    if(-not $m.Success) { throw "link99 listed no size for $ov" }
+    $used = [Convert]::ToInt32($m.Groups[1].Value,16)
+    Write-Output ("  {0,-10} used {1,4}  free {2,4}" -f $ov,$used,(0x1000 - $used))
+    if($used -gt 0x1000) { throw "$ov exceeds its 4K page" }
+}
 
 Write-Output "`n--- 7. create SBC deliverable ---"
 Copy-Item -LiteralPath ".\SBC99.EXE" -Destination (Join-Path $DistDir "LINK99.EXE") -Force
@@ -256,7 +275,9 @@ if(Test-Path -LiteralPath $MonitorDir -PathType Container) {
 Write-Output ""
 Write-Output "LINK99 FileEdit-style overlay build complete."
 Write-Output "OVL_USAGE: ID 1, virtual segment 8, physical page 2"
-Write-Output "CODEBANKS: pages 2..11 mapped through segment C (>C000)"
+Write-Output "OVL_FINAL: ID 13, virtual segment 8, physical page 3"
+Write-Output "OVL_EXE:   ID 14, virtual segment 8, physical page 4"
+Write-Output "CODEBANKS: pages 2..15 and 1 mapped through segment C (>C000)"
 Write-Output "SYMBOLS:   pages 13..15 mapped through segments 9..11"
 Write-Output "Deliverable: .\dist\LINK99.EXE"
 Write-Output ("Deployed: " + $Deployed)

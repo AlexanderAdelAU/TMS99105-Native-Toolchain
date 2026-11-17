@@ -1,0 +1,23 @@
+; T2.A99 -- smallest useful -P overlay, for testing SBC LINK99's paged EXE.
+;
+; AORG'd into the overlay window like any OVL99 overlay.  It is never
+; called; linking it proves that LINK99 places it on its page, keeps its
+; absolute words as they are, resolves its reference into the resident
+; image, and writes the chain blocks the shell loads.  Its odd length
+; exercises the last block's word alignment, its 0x23x bytes a split.
+;
+;   LINK99 CTEST IOLIB99.LIB -P2 T2        (or LINK99 @T2.LNK)
+;
+; gives CTEST.EXE: the resident image on page 0 at >1000, then T2 in two
+; page-2 blocks at >8000 and >81F8.  CTEST runs exactly as its .COM did.
+        EXT     exit
+        AORG    08000H
+T2:
+        B       @exit
+        BSS     0230H
+T2B:
+        WORD    T2,T2B
+        B       @exit
+        BYTE    1
+        ENT     T2
+        END
