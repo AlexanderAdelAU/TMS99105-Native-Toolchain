@@ -241,7 +241,8 @@ if($linkOut -notmatch '(?m)^OVL99 overlay map') {
 # Page budgets, from LINK99's -M listing ("N Code Bytes at ... MODULE",
 # the module's PSIZE - the size DREL used to report).  LINK99 itself
 # rejects a module that overruns its 4K page and checks every object's
-# reference slots; the >0FC0 budget keeps the margin FileEdit has always kept.
+# reference slots.  The budget is the full 4K page: the old >0FC0 limit was
+# EXE block padding, fixed in link99 3.10.3 and proven on the SBC.
 Write-Output "`n--- overlay page budgets ---"
 foreach($o in $Overlays) {
     $pattern = '(?im)^\s*([0-9A-F]+) Code Bytes at\s+\S+\s+\S+\s+' + [regex]::Escape($o.Name) + '\s*$'
@@ -250,10 +251,10 @@ foreach($o in $Overlays) {
         throw "LINK99 listed no size for $($o.Name)"
     }
     $used = [Convert]::ToInt32($match.Groups[1].Value,16)
-    $free = 0x0FC0 - $used
+    $free = 0x1000 - $used
     Write-Output ("  {0,-10} used {1,4}  free {2,4}" -f $o.Name,$used,$free)
     if($free -lt 0) {
-        throw "$($o.Name) exceeds the one-page >0FC0 budget"
+        throw "$($o.Name) exceeds its 4K page"
     }
 }
 
