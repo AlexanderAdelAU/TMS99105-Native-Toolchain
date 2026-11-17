@@ -137,6 +137,9 @@ linked on the PC; [`link99/tests/fileedit`](link99/tests/fileedit/) links it on 
 `FE.PAK` archive (`XMODEM FE.PAK`, `UNPACK FE`, `LINK99 @FILEEDIT.LNK`), and the result is the
 same `FILEEDIT.EXE` the Windows link99 makes from those files.
 
+**[OVL99.md](OVL99.md) is the reference** for the runtime, the table, the map and
+the rules.
+
 The current build still assigns **whole modules to pages manually**;
 automatic module/function placement is a proposed future toolchain
 phase, not a current feature. See the

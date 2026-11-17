@@ -108,6 +108,9 @@ thunks rather than directly to virtual overlay addresses.
 
 ## How transparent overlays work
 
+(The general reference for OVL99 — runtime, table format, map, rules — is
+[OVL99.md](../OVL99.md); this section walks through FileEdit's use of it.)
+
 **The key distinction is that LINK99 already knew how to place R99 modules
 in physical pages.** What FileEdit lacked was a stable, resident entry
 point for each exported overlay function, together with a resident runtime

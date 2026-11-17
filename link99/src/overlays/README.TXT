@@ -25,6 +25,8 @@ Data banks (guests, never entered as code):
 Not built (left from earlier plans): OVL_BASE.C, OVL_GETREL.C, OVL_LNK.C,
 OVL_P4T.A99, OVL_RESOLVE.C, OVL_START.C.
 
+See ..\..\..\OVL99.md for OVL99 itself.
+
 OVERLAY OWNERSHIP RULE
 ----------------------
 A module that can be entered as code must map virtual segment 8 so OVLMGR
