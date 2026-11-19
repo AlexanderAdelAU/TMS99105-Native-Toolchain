@@ -2,10 +2,11 @@
 ;  OVLMGR.A99 - Overlay Manager (consolidated, single manager)
 ;  TMS99105 SBC
 ;
-;  USAGE (unchanged from the caller's point of view):
-;    LI   R1,OVL_DECL   ; overlay ID
-;    CALL @OVLMGR       ; swap if needed (preserves R1-R11,R13-R15)
-;    CALL @OVL_FUNCn    ; call into that overlay's fixed slot
+;  Maps one overlay: every (segment, page) pair in its row of
+;  OVL_TABLE.  The thunks LINK99 -Y writes reach it through OVCALL.
+;
+;    LI   R1,id          ; overlay ID
+;    CALL @OVLMGR        ; map it (uses R0, R2, R3, R5, R12)
 ;*******************************************************************
 
 ;*******************************************************************
@@ -28,7 +29,6 @@
 ;*******************************************************************
 
 ;--- CONSTANTS ---
-	DXOP	PSEL,2
 	DXOP	PSEL_DIS,0
 	DXOP	PSEL_EN,1
 	DXOP	CALL,6
@@ -56,7 +56,7 @@ R15	EQU	15
 SP	EQU	10
 
 MAP_WIN_BASE:	EQU	080C0H
-BYTEWIDE:	EQU	2		;CRU BITS PER MAP REGISTER (unchanged)
+BYTEWIDE:	EQU	2		;LDCR count 2 = parallel byte transfer
 
 WINA_SEG2:	EQU	16		;window A's FIRST segment * 2
 					;(segment 8 -> >8000). Only used to
@@ -76,7 +76,7 @@ CURRENT_ID:
 	WORD	0,0,0,0,0,0,0,0
 	WORD	0,0,0,0,0,0,0,0
 
-;--- the window-A overlay ID, as a real data word OVLSTUBS can EXT.
+;--- the window-A overlay ID (EXT CUR_WINA_ID in OVCALL).
 ;    For a multi-page overlay this is the ID of the whole set: one ID
 ;    identifies every page of it. ---
 CUR_WINA_ID:
@@ -90,8 +90,7 @@ CUR_WINA_ID:
 ;  Preserves: R1, R4, R6-R11, R13-R15  (R1 unchanged on return)
 ;
 ;  Walks the row's (segment,page) pairs until a zero segment ends the
-;  list, mapping each. The CRU-write sequence inside the loop is the
-;  proven one, unchanged; only the surrounding iteration is new.
+;  list, mapping each.
 ;*******************************************************************
 OVLMGR:
 	MOV	R1,R3
@@ -118,14 +117,14 @@ OVLM_PAIR:
 	MOV	R1,@CURRENT_ID(R2)	;record the ID for this segment
 	CI	R2,WINA_SEG2		;window A's FIRST segment?
 	JNE	OVLM_P1
-	MOV	R1,@CUR_WINA_ID		;the EXT-able word OVLSTUBS reads
+	MOV	R1,@CUR_WINA_ID		;new window owner
 OVLM_P1:
 	C	R0,@CURRENT_PAGE(R2)
 	JEQ	OVLM_NEXT		;this page is already here
 
 	MOV	R0,@CURRENT_PAGE(R2)
 
-	;--- PROVEN CRU-WRITE SEQUENCE, UNCHANGED ---
+	;--- program the map register: PSEL off, LDCR, PSEL on ---
 	SLA	R0,8			;page into high byte for LDCR
 	PSEL_DIS
 	LI	R12,MAP_WIN_BASE
