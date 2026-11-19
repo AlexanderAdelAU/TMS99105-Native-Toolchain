@@ -47,7 +47,6 @@
 ;*******************************************************************
 
 ;--- CONSTANTS ---
-	DXOP	PSEL,2
 	DXOP	PSEL_DIS,0
 	DXOP	PSEL_EN,1
 	DXOP	CALL,6
@@ -75,7 +74,7 @@ R15	EQU	15
 SP	EQU	10
 
 MAP_WIN_BASE:	EQU	080C0H
-BYTEWIDE:	EQU	2		;CRU BITS PER MAP REGISTER (unchanged)
+BYTEWIDE:	EQU	2		;LDCR count 2 = parallel byte transfer
 
 WINA_SEG2:	EQU	16		;window A's FIRST segment * 2
 					;(segment 8 -> >8000). Only used to
@@ -109,8 +108,7 @@ CUR_WINA_ID:
 ;  Preserves: R1, R4, R6-R11, R13-R15  (R1 unchanged on return)
 ;
 ;  Walks the row's (segment,page) pairs until a zero segment ends the
-;  list, mapping each. The CRU-write sequence inside the loop is the
-;  proven one, unchanged; only the surrounding iteration is new.
+;  list, mapping each.
 ;*******************************************************************
 OVLMGR:
 	MOV	R1,R3
@@ -144,7 +142,7 @@ OVLM_P1:
 
 	MOV	R0,@CURRENT_PAGE(R2)
 
-	;--- PROVEN CRU-WRITE SEQUENCE, UNCHANGED ---
+	;--- program the map register: PSEL off, LDCR, PSEL on ---
 	SLA	R0,8			;page into high byte for LDCR
 	PSEL_DIS
 	LI	R12,MAP_WIN_BASE
