@@ -50,6 +50,24 @@ After that, `UNPACK` is on the disk for good.
    - A file that already exists is **replaced** without asking.
    - `JOB.PAK` stays on the disk; `ERA JOB.PAK` when you are done.
 
+## Even simpler: XMODEM 1.9R unpacks it for you
+
+From XMODEM 1.9R (TMS99105-SBC), receiving a `.PAK` unpacks it straight away into the
+current folder, and erases the `.PAK` if every file was written:
+
+```
+[TOOLS]%XMODEM JOB.PAK
+...SUCCESS.
+UNPACKING:
+  FILE1.R99
+  ...
+5 FILE(S) UNPACKED.
+  JOB.PAK ERASED.
+```
+
+After an error the `.PAK` is kept, so `UNPACK JOB` can be run on it later. `UNPACK.COM` is
+still the way to unpack a `.PAK` that is already on the disk.
+
 ## Example: everything LINK99 needs
 
 `link99\tests\fileedit\make_test_fileedit.ps1` packs the 17 files needed to link FileEdit
