@@ -21,6 +21,10 @@
 #define FREEMEM 166             /* >00A6: first free byte          */
 #define MEMLIM  176             /* >00B0: end of free memory       */
 
+/* The shell sets FREEMEM to the end of the program's last sector and,
+** for a .COM, MEMLIM to >E000.  The free space is then more than 32767
+** bytes, which a signed int sees as negative, so it is capped.  */
+
 int *x, *z;
 int maxw;                       /* words per number that fit       */
 int t[2];
@@ -158,8 +162,10 @@ main()
     vp = FREEMEM;
     fm = (*vp + 1) & -2;                /* word aligned             */
     vp = MEMLIM;
-    lim = *vp;
-    maxw = (lim - fm) / 6;              /* >8000 - fm wraps right  */
+    lim = *vp;                          /* >E000 for a .COM        */
+    lim = lim - fm;                     /* bytes free: over 32767  */
+    if(lim < 0) lim = 32766;            /* is negative to Small-C  */
+    maxw = lim / 6;                     /* x, then z twice as long */
     x = fm;
     z = x + maxw;
     maxp = 32767;
@@ -169,6 +175,7 @@ main()
         pstr("Lucas-Lehmer test of 2^p-1\n");
         for(i = 0; list[i]; ++i) {
             p = list[i];
+            if(p > maxp) break;
             pstr("2^"); pnum(p); pstr("-1 ");
             if(llt(p, 0)) pstr("is prime\n");
             else pstr("is composite\n");
