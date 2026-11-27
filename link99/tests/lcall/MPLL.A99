@@ -1,0 +1,354 @@
+;*******************************************************************
+;  MPLL.A99 - multi-word arithmetic for the Lucas-Lehmer test
+;
+;  A number is n words, LOWEST WORD FIRST: x[0] holds bits 15-0.
+;  (The opposite of a 32-bit LCALL value: here the loops walk up
+;  through memory as the carries walk up through the number.)
+;
+;  C-callable, arguments pushed left to right:
+;
+;    mpsqr(z, x, n)     z[0..2n-1] = x * x
+;    mpmod(x, z, n, p)  x = z mod 2^p - 1, from a 2n-word z (z is
+;                       changed).  The result is < 2^p, and may be
+;                       2^p - 1 itself, which is 0 mod 2^p - 1.
+;    mpsub2(x, n, p)    x = x - 2 mod 2^p - 1
+;    mpdiv1(x, n, d)    x = x / d, returns x % d   (d < 32768)
+;
+;  n words must hold p bits: n = ceil(p / 16).  p and n are taken as
+;  unsigned.  R6-R8 and R12 are saved and restored; R0-R5 and R11
+;  are used freely, as in CALL.
+;*******************************************************************
+
+	DXOP	CALL,6
+	DXOP	RET,7
+
+R0	EQU	0
+R1	EQU	1
+R2	EQU	2
+R3	EQU	3
+R4	EQU	4
+R5	EQU	5
+R6	EQU	6
+R7	EQU	7
+R8	EQU	8
+SP	EQU	10
+R11	EQU	11
+R12	EQU	12
+
+;--- save R6 R7 R8 R12 (the arguments then start at @10(SP)) ---
+SAVE:
+	AI	SP,-8
+	MOV	R6,*SP
+	MOV	R7,@2(SP)
+	MOV	R8,@4(SP)
+	MOV	R12,@6(SP)
+	RT
+REST:
+	MOV	*SP+,R6
+	MOV	*SP+,R7
+	MOV	*SP+,R8
+	MOV	*SP+,R12
+	RT
+
+;*******************************************************************
+;  mpsqr(z, x, n): @2 = n, @4 = x, @6 = z
+;
+;  1. z = 0
+;  2. z += x[i] * x[j] for every i < j  (each cross product once)
+;  3. z = 2z
+;  4. z += x[i]^2 for every i
+;  The inner loop of step 2 is where the time goes: one MPY and two
+;  32-bit adds per pair of words.
+;*******************************************************************
+mpsqr:
+	BL	@SAVE
+	MOV	@14(SP),R5		;z
+	MOV	@12(SP),R4		;x
+	MOV	@10(SP),R12		;n
+;--- 1. clear 2n words ---
+	MOV	R5,R8
+	MOV	R12,R3
+	A	R3,R3
+SQ1:
+	CLR	*R8+
+	DEC	R3
+	JNE	SQ1
+;--- 2. cross products: row i adds x[i]*x[i+1..n-1] at z[2i+1] ---
+	MOV	R5,R8
+	INCT	R8			;z[1]
+	MOV	R8,R5			;R5 = this row's first z word
+	MOV	R12,R11
+	DEC	R11			;rows left = n - 1 - i
+	JEQ	SQ3
+SQ2:
+	MOV	*R4+,R6			;multiplier x[i]; R4 -> x[i+1]
+	JEQ	SQ2N			;a zero row adds nothing
+	MOV	R4,R7			;x[j]
+	MOV	R5,R8			;z[i+j]
+	CLR	R2			;carry word
+	MOV	R11,R3
+SQ2L:
+	MOV	*R7+,R0
+	MPY	R6,R0			;R0:R1 = x[i] * x[j]
+	A	R2,R1
+	JNC	$+4
+	INC	R0
+	A	*R8,R1
+	JNC	$+4
+	INC	R0
+	MOV	R1,*R8+
+	MOV	R0,R2
+	DEC	R3
+	JNE	SQ2L
+	MOV	R2,*R8			;z[i+n], still 0 until now
+SQ2N:
+	AI	R5,4			;next row starts two words up
+	DEC	R11
+	JNE	SQ2
+;--- 3. double: 2n words, low to high ---
+SQ3:
+	MOV	@14(SP),R8
+	MOV	R12,R3
+	A	R3,R3
+	CLR	R2
+SQ3L:
+	MOV	*R8,R0
+	SLA	R0,1			;carry = the bit shifted out
+	JNC	SQ3A
+	SOC	R2,R0
+	LI	R2,1
+	JMP	SQ3B
+SQ3A:
+	SOC	R2,R0
+	CLR	R2
+SQ3B:
+	MOV	R0,*R8+
+	DEC	R3
+	JNE	SQ3L
+;--- 4. squares: z[2i], z[2i+1] += x[i]^2 ---
+	MOV	@14(SP),R8
+	MOV	@12(SP),R4
+	MOV	R12,R3
+	CLR	R2
+SQ4L:
+	MOV	*R4+,R6
+	MOV	R6,R0
+	MPY	R6,R0			;R0:R1 = x[i]^2
+	A	R2,R1
+	JNC	$+4
+	INC	R0
+	A	R1,*R8+
+	JNC	$+4
+	INC	R0			;(cannot overflow: the 32-bit sum fits)
+	CLR	R2
+	A	R0,*R8+
+	JNC	$+4
+	INC	R2
+	DEC	R3
+	JNE	SQ4L
+	BL	@REST
+	RET
+
+;*******************************************************************
+;  mpmod(x, z, n, p): @2 = p, @4 = n, @6 = z, @8 = x
+;
+;  2^p = 1 mod 2^p - 1, so z mod 2^p - 1 = (z mod 2^p) + (z >> p).
+;  With q = p / 16 and r = p % 16:
+;    1. x = z >> p:  x[k] = z[q+k] >> r | z[q+k+1] << (16 - r)
+;    2. z[q] &= 2^r - 1 (r > 0), then x += z[0..n-1]
+;    3. fold: while bit p of x is set, clear it and add 1
+;*******************************************************************
+mpmod:
+	BL	@SAVE
+	MOV	@16(SP),R4		;x
+	MOV	@14(SP),R5		;z
+	MOV	@12(SP),R12		;n
+	MOV	@10(SP),R7		;p
+	MOV	R7,R8
+	SRL	R8,4			;q
+	ANDI	R7,15			;r
+	MOV	R8,R6
+	A	R6,R6
+	A	R5,R6			;R6 -> z[q]
+;--- 1. x = z >> p ---
+	MOV	R12,R3
+	MOV	R7,R7
+	JNE	MM1R
+MM1W:
+	MOV	*R6+,*R4+		;r = 0: whole words
+	DEC	R3
+	JNE	MM1W
+	JMP	MM2
+MM1R:
+	LI	R11,16
+	S	R7,R11			;16 - r
+MM1RL:
+	MOV	*R6+,R1
+	MOV	R7,R0
+	SRL	R1,0			;z[q+k] >> r
+	MOV	*R6,R2
+	MOV	R11,R0
+	SLA	R2,0			;z[q+k+1] << (16 - r)
+	SOC	R2,R1
+	MOV	R1,*R4+
+	DEC	R3
+	JNE	MM1RL
+;--- 2. add the low p bits ---
+	MOV	R8,R6
+	A	R6,R6
+	A	R5,R6			;z[q] again
+	MOV	R7,R0
+	JEQ	MM2
+	LI	R1,1
+	SLA	R1,0			;2^r
+	DEC	R1			;2^r - 1
+	INV	R1
+	SZC	R1,*R6			;z[q] &= 2^r - 1
+MM2:
+	MOV	@16(SP),R4		;x
+	MOV	R12,R3
+	CLR	R2
+MM2L:
+	CLR	R0
+	MOV	*R4,R1
+	A	R2,R1
+	JNC	$+4
+	INC	R0
+	A	*R5+,R1
+	JNC	$+4
+	INC	R0
+	MOV	R1,*R4+
+	MOV	R0,R2
+	DEC	R3
+	JNE	MM2L
+;--- 3. fold the bit at 2^p back in as +1 ---
+;   r = 0: bit p is the carry out of the top word (R2).
+;   r > 0: bit p is bit r of the top word.
+	DECT	R4			;-> x[n-1]
+	MOV	R7,R7
+	JNE	MM3R
+MM3W:
+	MOV	R2,R2
+	JEQ	MMX
+	BL	@INC1			;x += 1, carry out in R2
+	JMP	MM3W
+MM3R:
+	LI	R1,1
+	MOV	R7,R0
+	SLA	R1,0			;2^r
+MM3RL:
+	MOV	*R4,R0
+	COC	R1,R0
+	JNE	MMX
+	SZC	R1,*R4
+	BL	@INC1
+	JMP	MM3RL
+MMX:
+	BL	@REST
+	RET
+
+;   x += 1 for the n words at @16(SP) (count R12); carry out in R2.
+;   Called from mpmod only, so the argument offsets are mpmod's.
+INC1:
+	MOV	@16(SP),R5
+	MOV	R12,R3
+	CLR	R2
+INC1L:
+	INC	*R5+
+	JNC	INC1X			;no carry: done
+	DEC	R3
+	JNE	INC1L
+	INC	R2			;carried out of the top word
+INC1X:
+	RT
+
+;*******************************************************************
+;  mpsub2(x, n, p): @2 = p, @4 = n, @6 = x
+;
+;  x >= 2: subtract 2 with borrow.  x < 2 (0 or 1): the answer is
+;  2^p - 1 - (2 - x), so x becomes 2^p - 1 and then loses 2 - x.
+;*******************************************************************
+mpsub2:
+	BL	@SAVE
+	MOV	@14(SP),R4		;x
+	MOV	@12(SP),R12		;n
+	MOV	@10(SP),R7		;p
+;--- is x < 2? ---
+	MOV	*R4,R0
+	CI	R0,2
+	JHE	MS1			;x[0] >= 2 (unsigned)
+	MOV	R4,R5
+	MOV	R12,R3
+	DEC	R3
+	JEQ	MS2			;one word: x < 2
+MSZ:
+	INCT	R5
+	MOV	*R5,R1
+	JNE	MS1			;a higher word is set: x >= 2
+	DEC	R3
+	JNE	MSZ
+;--- x < 2: x = 2^p - 1 - (2 - x0) ---
+MS2:
+	LI	R1,2
+	S	R0,R1			;R1 = 2 - x0
+	MOV	R4,R5
+	MOV	R12,R3
+MS2L:
+	SETO	*R5+
+	DEC	R3
+	JNE	MS2L
+	ANDI	R7,15
+	JEQ	MS2S
+	DECT	R5			;top word holds r bits
+	LI	R2,1
+	MOV	R7,R0
+	SLA	R2,0
+	DEC	R2
+	MOV	R2,*R5
+MS2S:
+	S	R1,*R4			;bit 0 word is all ones: no borrow
+	JMP	MSX
+;--- x >= 2 ---
+MS1:
+	MOV	R4,R5
+	LI	R1,2
+	S	R1,*R5+
+	JOC	MSX			;no borrow
+MS1L:
+	DEC	*R5+			;borrow up (stops: x >= 2)
+	JNC	MS1L
+MSX:
+	BL	@REST
+	RET
+
+;*******************************************************************
+;  mpdiv1(x, n, d): @2 = d, @4 = n, @6 = x;  returns the remainder
+;  Top word down, one DIV each: the remainder so far is always < d,
+;  so DIV never overflows.
+;*******************************************************************
+mpdiv1:
+	MOV	@6(SP),R5
+	MOV	@4(SP),R3
+	MOV	@2(SP),R2
+	MOV	R3,R4
+	DEC	R4
+	A	R4,R4
+	A	R4,R5			;-> x[n-1]
+	CLR	R0
+MD1:
+	MOV	*R5,R1
+	DIV	R2,R0			;R0 = quotient word, R1 = remainder
+	MOV	R0,*R5
+	MOV	R1,R0
+	DECT	R5
+	DEC	R3
+	JNE	MD1
+	MOV	R0,R4
+	RET
+
+	ENT	mpsqr
+	ENT	mpmod
+	ENT	mpsub2
+	ENT	mpdiv1
+
+	END
