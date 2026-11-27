@@ -21,7 +21,7 @@ The development method deliberately follows the successful FileEdit project: beg
   - `tests/paged`: a `-P` overlay, `LINK99 @T2.LNK` with a CTEST of your own.
   - `tests/ovly`: the OVL99 hello demo with `-Y` (`make_test_ovly.ps1`, then `LINK99 @HELLO.LNK` and `HELLO`).
   - `tests/fileedit`: FileEdit from libraries with `-Y`, sent as one archive (`make_test_fileedit.ps1`, then `XMODEM FE.PAK`, `UNPACK FE`, `LINK99 @FILEEDIT.LNK`).
-  - `tests/lcall`: LCALL, the 32-bit arithmetic companion to `CALL.R99` (`make_test_lcall.ps1`, then `LTEST`: 1504 checks against answers computed by `gen_ltest.py`).
+  - `tests/lcall`: LCALL, the 32-bit arithmetic companion to `CALL.R99` (`make_test_lcall.ps1`, then `LTEST`: 1504 checks against answers computed by `gen_ltest.py`). Also `MERSENNE`, a Lucas-Lehmer prime test (`MPLL.A99`: multi-word squaring mod 2^p-1): `MERSENNE` checks a list of exponents, `MERSENNE 1279` tests 2^1279-1 and prints its 386 digits.
 - Hardware-tested: `-P` (CTEST + T2), `-Y` (hello demo), and the FileEdit link above, which runs.
 
 ## Memory
