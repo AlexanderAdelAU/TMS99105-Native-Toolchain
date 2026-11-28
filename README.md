@@ -12,8 +12,10 @@ compile, assemble, link and run programs without a PC.
 | FileEdit | `FILEEDIT.EXE` | Full-screen VT100/ANSI text editor | [`fileedit/`](fileedit/) |
 | UNPACK | `UNPACK.COM` | Unpacks a PACK99 archive: many files in one XMODEM transfer (packed on Windows by `pack99.ps1`) | [`pack99/`](pack99/) |
 
-Ready-built copies of the first four are in [`bin/`](bin/). They date from the
-repository's first commit; the build scripts below make the current versions.
+Ready-built copies of the first four are in [`bin/`](bin/). `SMALLC99.EXE` is
+current (SmallC99 main, 28 Nov 2026); `R99.COM`, `LINK99.EXE` and `FILEEDIT.EXE`
+date from the repository's first commit, and the build scripts below make the
+current versions.
 
 ---
 
